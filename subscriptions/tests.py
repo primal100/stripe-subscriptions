@@ -4,7 +4,7 @@ from .types import UserProtocol
 
 
 @customer_id_required
-def create_payment_method(user: UserProtocol):
+def create_payment_method(user: UserProtocol, **kwargs):
     payment_method = stripe.PaymentMethod.create(
         type="card",
         card={
@@ -13,6 +13,7 @@ def create_payment_method(user: UserProtocol):
             "exp_year": 2025,
             "cvc": "314",
         },
+        **kwargs
     )
     payment_method_id = payment_method['id']
     stripe.PaymentMethod.attach(payment_method_id, customer=user.stripe_customer_id)

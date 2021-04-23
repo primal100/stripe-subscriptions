@@ -7,11 +7,9 @@ from datetime import datetime, timedelta
 import subscriptions
 from subscriptions import UserProtocol, CacheProtocol, User
 
-from typing import Optional, Any
+from typing import Optional, Any, List
 
 api_key = ''
-checkout_success_url = "http://localhost"
-checkout_cancel_url = "http://localhost/cancelled"
 product_url = "http://localhost/paywall"
 
 
@@ -22,7 +20,22 @@ def pytest_addoption(parser):
 @pytest.fixture(scope="session", autouse=True)
 def setup_stripe(pytestconfig):
     api_key = pytestconfig.getoption("apikey")
-    subscriptions.setup_stripe(api_key, checkout_success_url, checkout_cancel_url)
+    subscriptions.setup_stripe(api_key)
+
+
+@pytest.fixture
+def checkout_success_url() -> str:
+    return "http://localhost"
+
+
+@pytest.fixture
+def checkout_cancel_url() -> str:
+    return "http://localhost/cancel"
+
+
+@pytest.fixture
+def payment_method_types() -> List[str]:
+    return ["card"]
 
 
 @pytest.fixture

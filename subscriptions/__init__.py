@@ -3,11 +3,11 @@ from .decorators import customer_id_required
 from .exceptions import StripeCustomerIdRequired
 from . import tests
 from .types import UserProtocol, CacheProtocol
+from .version import version
 
 from typing import Any, Dict, List, Optional, Tuple
 
 
-version = "1.0.0"
 app_name = 'stripe-subscriptions'
 app_url = "https://github.com/primal100/stripe-subscriptions"
 
@@ -27,53 +27,49 @@ class User(UserProtocol):
         self.stripe_customer_id = stripe_customer_id
 
 
-def setup_stripe(api_key: str, stripe_checkout_success_url = None, stripe_checkout_cancel_url: str = None,
-                 set_app_info: bool = True) -> None:
+def setup_stripe(api_key: str, set_app_info: bool = True) -> None:
     stripe.api_key = api_key
-    settings.checkout_success_url = stripe_checkout_success_url
-    settings.checkout_cancel_url = stripe_checkout_cancel_url
     if set_app_info:
         stripe.set_app_info(app_name, version=version, url=app_url)
 
 
-def create_customer(user: UserProtocol, metadata: Optional[Dict[str, Any]] = None) -> stripe.Customer:
+def create_customer(user: UserProtocol, metadata: Optional[Dict[str, Any]] = None, **kwargs) -> stripe.Customer:
     metadata = metadata or {}
     metadata ['id'] = user.id
-    customer = stripe.Customer.create(email=user.email, name=str(user), metadata=metadata)
+    customer = stripe.Customer.create(email=user.email, name=str(user), metadata=metadata, **kwargs)
     user.stripe_customer_id = customer['id']
     return customer
 
 
 @customer_id_required
-def create_checkout(user: UserProtocol, mode: str, line_items: List[Dict[str, Any]]) -> stripe.checkout.Session:
+def create_checkout(user: UserProtocol, mode: str, line_items: List[Dict[str, Any]],
+                    **kwargs) -> stripe.checkout.Session:
     checkout_session = stripe.checkout.Session.create(
         client_reference_id=user.id,
-        success_url=settings.checkout_success_url,
-        cancel_url=settings.checkout_cancel_url,
         customer=user.stripe_customer_id,
-        payment_method_types=['card'],
-        billing_address_collection='required',
         mode=mode,
-        line_items=line_items
+        line_items=line_items,
+        **kwargs
     )
     return checkout_session
 
 
 @customer_id_required
-def create_billing_portal_session(user: UserProtocol) -> stripe.billing_portal.Session:
+def create_billing_portal_session(user: UserProtocol, **kwargs) -> stripe.billing_portal.Session:
     portal_session = stripe.billing_portal.Session.create(
         customer=user.stripe_customer_id,
+        **kwargs
     )
     return portal_session
 
 
-def create_stripe_subscription_checkout(user: UserProtocol, price_id: str) -> stripe.checkout.Session:
+def create_stripe_subscription_checkout(user: UserProtocol, price_id: str, **kwargs) -> stripe.checkout.Session:
     checkout_session = create_checkout(user, "subscription", [
             {
                 'price': price_id,
                 'quantity': 1
             },
-        ])
+        ], **kwargs)
     return checkout_session
 
 
@@ -84,13 +80,13 @@ def list_subscriptions(user: UserProtocol, **kwargs):
     return []
 
 
-def get_all_subscription_info(user: UserProtocol):
-    data = list_subscriptions(user, status='all')
+def get_all_subscription_info(user: UserProtocol, **kwargs):
+    data = list_subscriptions(user, status='all', **kwargs)
     return data
 
 
-def list_active_subscriptions(user: UserProtocol):
-    return list_subscriptions(user, status='active')
+def list_active_subscriptions(user: UserProtocol, **kwargs):
+    return list_subscriptions(user, status='active', **kwargs)
 
 
 def check_subscription_product_id(sub: stripe.Subscription) -> str:
@@ -101,13 +97,13 @@ def check_subscription_price_id(sub: stripe.Subscription) -> str:
     return sub.get('plan', {}).get('id', None)
 
 
-def list_products_subscribed_to(user: UserProtocol) -> List[Tuple[str, int]]:
-    subscriptions = list_active_subscriptions(user)
+def list_products_subscribed_to(user: UserProtocol, **kwargs) -> List[Tuple[str, int]]:
+    subscriptions = list_active_subscriptions(user, **kwargs)
     return [(check_subscription_product_id(sub), sub.get('cancel_at', None)) for sub in subscriptions]
 
 
-def list_prices_subscribed_to(user: UserProtocol) -> List[str]:
-    subscriptions = list_active_subscriptions(user)
+def list_prices_subscribed_to(user: UserProtocol, **kwargs) -> List[str]:
+    subscriptions = list_active_subscriptions(user, **kwargs)
     return [check_subscription_price_id(sub) for sub in subscriptions]
 
 
@@ -133,12 +129,13 @@ def is_subscribed_with_cache(user: UserProtocol, product_id: str, cache: CachePr
 
 
 @customer_id_required
-def create_subscription(user: UserProtocol, price_id: str) -> stripe.Subscription:
+def create_subscription(user: UserProtocol, price_id: str, **kwargs) -> stripe.Subscription:
     subscription = stripe.Subscription.create(
         customer=user.stripe_customer_id,
         items=[
             {"price": price_id},
         ],
+        **kwargs
     )
     return subscription
 
@@ -157,8 +154,8 @@ def _minimize_price(price: Dict[str, Any]) -> Dict[str, Any]:
     return {k: price[k] for k in ['id', 'recurring', 'type', 'unit_amount', 'unit_amount_decimal']}
 
 
-def get_subscription_prices(user: UserProtocol, product_id: str) -> List[Dict[str, Any]]:
-    response = stripe.Price.list(active=True, product=product_id)
+def get_subscription_prices(user: UserProtocol, product_id: str, **kwargs) -> List[Dict[str, Any]]:
+    response = stripe.Price.list(active=True, product=product_id, **kwargs)
     prices = [_minimize_price(p) for p in response['data']]
     if user:
         subscribed_prices = list_prices_subscribed_to(user)
