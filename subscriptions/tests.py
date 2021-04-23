@@ -1,12 +1,16 @@
-def create_test_payment_method(user):
-    if not user.stripe_customer_id:
-        create_customer(user)
+import stripe
+from .decorators import customer_id_required
+from .types import UserProtocol
+
+
+@customer_id_required
+def create_payment_method(user: UserProtocol):
     payment_method = stripe.PaymentMethod.create(
         type="card",
         card={
             "number": "4242424242424242",
             "exp_month": 9,
-            "exp_year": 2021,
+            "exp_year": 2025,
             "cvc": "314",
         },
     )

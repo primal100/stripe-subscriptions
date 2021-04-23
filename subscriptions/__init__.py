@@ -1,16 +1,10 @@
 import stripe
-import sys
-from functools import wraps
-
-
-py38 = sys.version_info >= (3, 8)
-
+from .decorators import customer_id_required
+from .exceptions import StripeCustomerIdRequired
+from . import tests
+from .types import UserProtocol, CacheProtocol
 
 from typing import Any, Dict, List, Optional, Tuple
-if py38:
-    from typing import Protocol
-else:
-    from typing_extensions import Protocol
 
 
 class Settings:
@@ -19,20 +13,6 @@ class Settings:
 
 
 settings = Settings()
-
-
-class UserProtocol(Protocol):
-    id: Any
-    email: str
-    stripe_customer_id: Optional[str]
-
-
-class CacheProtocol(Protocol):
-    def set(self, key: str, value: Any) -> Any:
-        pass
-
-    def get(self, key: str) -> Any:
-        pass
 
 
 class User(UserProtocol):
@@ -54,20 +34,6 @@ def create_customer(user: UserProtocol, metadata: Optional[Dict[str, Any]] = Non
     customer = stripe.Customer.create(email=user.email, name=str(user), metadata=metadata)
     user.stripe_customer_id = customer['id']
     return customer
-
-
-class StripeCustomerIdRequired(BaseException):
-    pass
-
-
-def customer_id_required(f):
-    @wraps(f)
-    def wrapper(user: UserProtocol, *args, **kwargs):
-        if user.stripe_customer_id:
-            return f(user, *args, **kwargs)
-        raise StripeCustomerIdRequired(
-            "It is required to first create this customer in stripe using the create_customer method")
-    return wrapper
 
 
 @customer_id_required
@@ -95,16 +61,6 @@ def create_billing_portal_session(user: UserProtocol) -> stripe.billing_portal.S
 
 def create_stripe_subscription_checkout(user: UserProtocol, price_id: str) -> stripe.checkout.Session:
     checkout_session = create_checkout(user, "subscription", [
-            {
-                'price': price_id,
-                'quantity': 1
-            },
-        ])
-    return checkout_session
-
-
-def create_stripe_product_checkout(user: UserProtocol, price_id: str) -> stripe.checkout.Session:
-    checkout_session = create_checkout(user, "payment", [
             {
                 'price': price_id,
                 'quantity': 1

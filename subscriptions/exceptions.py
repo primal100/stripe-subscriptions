@@ -1,0 +1,2 @@
+class StripeCustomerIdRequired(BaseException):
+    pass
