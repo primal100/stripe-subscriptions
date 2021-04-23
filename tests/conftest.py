@@ -1,4 +1,7 @@
+import os
+
 import pytest
+import stripe
 from datetime import datetime, timedelta
 
 import subscriptions
@@ -9,49 +12,70 @@ from typing import Optional, Any
 api_key = ''
 checkout_success_url = "http://localhost"
 checkout_cancel_url = "http://localhost/cancelled"
+product_url = "http://localhost/paywall"
+
+
+def pytest_addoption(parser):
+    parser.addoption("--apikey", action="store", default=os.environ.get('STRIPE_TEST_SECRET_KEY'))
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_stripe():
+def setup_stripe(pytestconfig):
+    api_key = pytestconfig.getoption("apikey")
     subscriptions.setup_stripe(api_key, checkout_success_url, checkout_cancel_url)
 
 
 @pytest.fixture
-def stripe_existing_customer_id() -> str:
-    return ''
-
-
-@pytest.fixture
-def existing_user(stripe_existing_customer_id) -> UserProtocol:
-    return User(user_id=1, email='testuser@example.com', stripe_customer_id=stripe_existing_customer_id)
-
-
-@pytest.fixture
-def new_user() -> UserProtocol:
-    user = User(user_id=2, email='testuser2@example.com')
+def user() -> UserProtocol:
+    user = User(user_id=1, email='testuser@example.com')
     yield user
     if user.stripe_customer_id:
         subscriptions.delete_customer(user)
 
 
 @pytest.fixture
+def user_with_customer_id(user) -> UserProtocol:
+    subscriptions.create_customer(user)
+    return user
+
+
+@pytest.fixture
+def subscribed_user(user_with_customer_id, stripe_price_id) -> UserProtocol:
+    subscriptions.tests.create_payment_method(user_with_customer_id)
+    subscriptions.create_subscription(user_with_customer_id, stripe_price_id)
+    return user_with_customer_id
+
+
+@pytest.fixture(scope="session")
 def stripe_subscription_product_id() -> str:
-    return ''
+    products = stripe.Product.list(url=product_url, limit=1)
+    if products:
+        product = products['data'][0]
+    else:
+        product = stripe.Product.create(name="Gold Special", url=product_url)
+    return product['id']
 
 
-@pytest.fixture
-def stripe_yearly_price_id() -> str:
-    return ''
-
-
-@pytest.fixture
-def stripe_monthly_price_id() -> str:
-    return ''
+@pytest.fixture(scope="session")
+def stripe_price_id(stripe_subscription_product_id) -> str:
+    prices = stripe.Price.list(product=stripe_subscription_product_id, limit=1)
+    if prices:
+        price = prices.data[0]
+    else:
+        price = stripe.Price.create(
+            unit_amount=129,
+            currency="usd",
+            recurring={"interval": "month"},
+            product=stripe_subscription_product_id,
+        )
+    return price['id']
 
 
 class Cache(CacheProtocol):
-    _data = {}
     expire_after = 60
+
+    def __init__(self):
+        self._data = {}
 
     def get(self, key: str) -> Optional[Any]:
         result = self._data.get(key)

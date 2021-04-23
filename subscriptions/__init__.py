@@ -7,6 +7,11 @@ from .types import UserProtocol, CacheProtocol
 from typing import Any, Dict, List, Optional, Tuple
 
 
+version = "1.0.0"
+app_name = 'stripe-subscriptions'
+app_url = "https://github.com/primal100/stripe-subscriptions"
+
+
 class Settings:
     checkout_success_url = None
     checkout_cancel_url = None
@@ -22,10 +27,13 @@ class User(UserProtocol):
         self.stripe_customer_id = stripe_customer_id
 
 
-def setup_stripe(api_key: str, stripe_checkout_success_url = None, stripe_checkout_cancel_url: str = None) -> None:
+def setup_stripe(api_key: str, stripe_checkout_success_url = None, stripe_checkout_cancel_url: str = None,
+                 set_app_info: bool = True) -> None:
     stripe.api_key = api_key
     settings.checkout_success_url = stripe_checkout_success_url
     settings.checkout_cancel_url = stripe_checkout_cancel_url
+    if set_app_info:
+        stripe.set_app_info(app_name, version=version, url=app_url)
 
 
 def create_customer(user: UserProtocol, metadata: Optional[Dict[str, Any]] = None) -> stripe.Customer:
