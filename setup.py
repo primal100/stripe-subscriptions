@@ -26,5 +26,5 @@ setup(
     ],
     python_requires='>=3.5',
     setup_requires=['wheel'],
-    install_requires="stripe",
+    install_requires=["stripe"],
 )

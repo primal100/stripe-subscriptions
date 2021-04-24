@@ -12,6 +12,9 @@ app_name = 'stripe-subscriptions'
 app_url = "https://github.com/primal100/stripe-subscriptions"
 
 
+stripe.set_app_info(app_name, version=version, url=app_url)
+
+
 class Settings:
     checkout_success_url = None
     checkout_cancel_url = None
@@ -25,12 +28,6 @@ class User(UserProtocol):
         self.id = user_id
         self.email = email
         self.stripe_customer_id = stripe_customer_id
-
-
-def setup_stripe(api_key: str, set_app_info: bool = True) -> None:
-    stripe.api_key = api_key
-    if set_app_info:
-        stripe.set_app_info(app_name, version=version, url=app_url)
 
 
 def create_customer(user: UserProtocol, metadata: Optional[Dict[str, Any]] = None, **kwargs) -> stripe.Customer:
@@ -54,23 +51,13 @@ def create_checkout(user: UserProtocol, mode: str, line_items: List[Dict[str, An
     return checkout_session
 
 
-@customer_id_required
-def create_billing_portal_session(user: UserProtocol, **kwargs) -> stripe.billing_portal.Session:
-    portal_session = stripe.billing_portal.Session.create(
-        customer=user.stripe_customer_id,
-        **kwargs
-    )
-    return portal_session
-
-
-def create_stripe_subscription_checkout(user: UserProtocol, price_id: str, **kwargs) -> stripe.checkout.Session:
-    checkout_session = create_checkout(user, "subscription", [
+def create_subscription_checkout(user: UserProtocol, price_id: str, **kwargs) -> stripe.checkout.Session:
+    return create_checkout(user, "subscription", [
             {
                 'price': price_id,
                 'quantity': 1
             },
         ], **kwargs)
-    return checkout_session
 
 
 def list_subscriptions(user: UserProtocol, **kwargs):
@@ -130,14 +117,13 @@ def is_subscribed_with_cache(user: UserProtocol, product_id: str, cache: CachePr
 
 @customer_id_required
 def create_subscription(user: UserProtocol, price_id: str, **kwargs) -> stripe.Subscription:
-    subscription = stripe.Subscription.create(
+    return stripe.Subscription.create(
         customer=user.stripe_customer_id,
         items=[
             {"price": price_id},
         ],
         **kwargs
     )
-    return subscription
 
 
 def cancel_subscription(user: UserProtocol, product_id: str) -> bool:

@@ -19,8 +19,7 @@ def pytest_addoption(parser):
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_stripe(pytestconfig):
-    api_key = pytestconfig.getoption("apikey")
-    subscriptions.setup_stripe(api_key)
+    stripe.api_key = pytestconfig.getoption("apikey")
 
 
 @pytest.fixture
