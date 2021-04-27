@@ -33,4 +33,4 @@ jobs:
         pip install -r requirements_tests.txt
     - name: Test with pytest
       run: |
-        pytest tests -vv
+        pytest tests -vv --apikey ${{ secrets.STRIPE_TEST_SECRET_KEY }}
