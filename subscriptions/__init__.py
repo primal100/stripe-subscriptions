@@ -3,7 +3,7 @@ from .decorators import customer_id_required
 from .exceptions import StripeCustomerIdRequired
 from . import tests
 from .types import UserProtocol, CacheProtocol
-from .version import version
+from .__version__ import version
 
 from typing import Any, Dict, List, Optional, Tuple
 

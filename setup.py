@@ -11,7 +11,7 @@ with open('subscriptions/__version__.py') as f:
 
 setup(
     name='stripe-subscriptions',
-    version=main_ns['__version__'],
+    version=main_ns['version'],
     packages=['subscriptions'],
     url='https://github.com/primal100/stripe-subscriptions',
     license="MIT License",
