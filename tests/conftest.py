@@ -10,7 +10,11 @@ from subscriptions import UserProtocol, CacheProtocol, User
 from typing import Optional, Any, List
 
 api_key = ''
-product_url = "http://localhost/paywall"
+
+
+@pytest.fixture(scope="session")
+def stripe_subscription_product_url() -> str:
+    return "http://localhost/paywall"
 
 
 def pytest_addoption(parser):
@@ -22,17 +26,17 @@ def setup_stripe(pytestconfig):
     stripe.api_key = pytestconfig.getoption("apikey")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def checkout_success_url() -> str:
     return "http://localhost"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def checkout_cancel_url() -> str:
     return "http://localhost/cancel"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def payment_method_types() -> List[str]:
     return ["card"]
 
@@ -59,12 +63,12 @@ def subscribed_user(user_with_customer_id, stripe_price_id) -> UserProtocol:
 
 
 @pytest.fixture(scope="session")
-def stripe_subscription_product_id() -> str:
-    products = stripe.Product.list(url=product_url, limit=1)
+def stripe_subscription_product_id(stripe_subscription_product_url) -> str:
+    products = stripe.Product.list(url=stripe_subscription_product_url, limit=1)
     if products:
         product = products['data'][0]
     else:
-        product = stripe.Product.create(name="Gold Special", url=product_url)
+        product = stripe.Product.create(name="Gold Special", url=stripe_subscription_product_url)
     return product['id']
 
 
@@ -104,3 +108,8 @@ class Cache(CacheProtocol):
 @pytest.fixture
 def cache() -> CacheProtocol:
     return Cache()
+
+
+@pytest.fixture
+def expected_subscription_prices() -> List:
+    return []

@@ -1,5 +1,6 @@
 import pytest
 import subscriptions
+from urllib.parse import quote
 
 
 def test_create_customer_user(user):
@@ -31,6 +32,18 @@ def test_is_subscribed(subscribed_user, stripe_subscription_product_id):
     assert subscriptions.is_subscribed(subscribed_user, stripe_subscription_product_id)
 
 
+def test_is_subscribed_url(subscribed_user, stripe_subscription_product_url):
+    is_subscribed = subscriptions.is_subscribed_and_cancelled_time(subscribed_user, url=stripe_subscription_product_url)
+    assert is_subscribed['subscribed'] is True
+    assert is_subscribed['cancel_at'] is None
+    assert subscriptions.is_subscribed(subscribed_user, url=stripe_subscription_product_url)
+
+
+def test_is_subscribed_missing_args(subscribed_user):
+    with pytest.raises(subscriptions.SubscriptionArgsMissingException):
+        subscriptions.is_subscribed_and_cancelled_time(subscribed_user)
+
+
 def test_is_not_subscribed_user(user_with_customer_id, stripe_subscription_product_id):
     is_subscribed = subscriptions.is_subscribed_and_cancelled_time(user_with_customer_id, stripe_subscription_product_id)
     assert is_subscribed['subscribed'] is False
@@ -46,22 +59,33 @@ def test_is_not_subscribed_user_no_customer_id(user, stripe_subscription_product
 
 
 def test_is_subscribed_with_cache(subscribed_user, stripe_subscription_product_id, cache):
-    cache_key = f'is_subscribed_{subscribed_user.id}'
+    cache_key = f'is_subscribed_{stripe_subscription_product_id}_{subscribed_user.id}'
     assert cache.get(cache_key) is None
-    subscribed = subscriptions.is_subscribed_with_cache(subscribed_user, stripe_subscription_product_id, cache)
+    subscribed = subscriptions.is_subscribed_with_cache(subscribed_user, cache, stripe_subscription_product_id)
     assert subscribed is True
     assert cache.get(cache_key) is True
-    subscribed = subscriptions.is_subscribed_with_cache(subscribed_user, stripe_subscription_product_id, cache)
+    subscribed = subscriptions.is_subscribed_with_cache(subscribed_user, cache, stripe_subscription_product_id)
+    assert subscribed is True
+
+
+def test_is_subscribed_with_cache_url(subscribed_user, stripe_subscription_product_url, cache):
+    sanitized_url = quote(stripe_subscription_product_url)
+    cache_key = f'is_subscribed_{sanitized_url}_{subscribed_user.id}'
+    assert cache.get(cache_key) is None
+    subscribed = subscriptions.is_subscribed_with_cache(subscribed_user, cache, url=stripe_subscription_product_url)
+    assert subscribed is True
+    assert cache.get(cache_key) is True
+    subscribed = subscriptions.is_subscribed_with_cache(subscribed_user, cache, url=stripe_subscription_product_url)
     assert subscribed is True
 
 
 def test_is_not_subscribed_with_cache(user, stripe_subscription_product_id, cache):
     cache_key = f'is_subscribed_{user.id}'
     assert cache.get(cache_key) is None
-    subscribed = subscriptions.is_subscribed_with_cache(user, stripe_subscription_product_id, cache)
+    subscribed = subscriptions.is_subscribed_with_cache(user, cache, product_id=stripe_subscription_product_id)
     assert subscribed is False
     assert cache.get(cache_key) is None
-    subscribed = subscriptions.is_subscribed_with_cache(user, stripe_subscription_product_id, cache)
+    subscribed = subscriptions.is_subscribed_with_cache(user, cache, product_id=stripe_subscription_product_id)
     assert subscribed is False
 
 
@@ -88,6 +112,11 @@ def test_list_prices_subscribed_to_subscribed_user(subscribed_user, stripe_price
 def test_list_prices_subscribed_to_user_no_subscriptions(user):
     is_subscribed = subscriptions.list_prices_subscribed_to(user)
     assert is_subscribed == []
+
+
+def test_get_subscription_prices(user, expected_subscription_prices):
+    prices = subscriptions.get_subscription_prices(user)
+    assert prices == expected_subscription_prices
 
 
 def test_subscription_lifecycle(user, stripe_price_id, stripe_subscription_product_id):

@@ -1,6 +1,7 @@
 import stripe
 from .decorators import customer_id_required
-from .exceptions import StripeCustomerIdRequired
+from .exceptions import StripeCustomerIdRequired, SubscriptionArgsMissingException
+from urllib.parse import quote
 from . import tests
 from .types import UserProtocol, CacheProtocol
 from .__version__ import version
@@ -15,14 +16,6 @@ app_url = "https://github.com/primal100/stripe-subscriptions"
 stripe.set_app_info(app_name, version=version, url=app_url)
 
 
-class Settings:
-    checkout_success_url = None
-    checkout_cancel_url = None
-
-
-settings = Settings()
-
-
 class User(UserProtocol):
     def __init__(self, user_id: Any, email: str, stripe_customer_id: Optional[str] = None):
         self.id = user_id
@@ -30,8 +23,8 @@ class User(UserProtocol):
         self.stripe_customer_id = stripe_customer_id
 
 
-def create_customer(user: UserProtocol, metadata: Optional[Dict[str, Any]] = None, **kwargs) -> stripe.Customer:
-    metadata = metadata or {}
+def create_customer(user: UserProtocol, **kwargs) -> stripe.Customer:
+    metadata = kwargs.pop('metadata', {})
     metadata ['id'] = user.id
     customer = stripe.Customer.create(email=user.email, name=str(user), metadata=metadata, **kwargs)
     user.stripe_customer_id = customer['id']
@@ -39,16 +32,20 @@ def create_customer(user: UserProtocol, metadata: Optional[Dict[str, Any]] = Non
 
 
 @customer_id_required
+def delete_customer(user: UserProtocol) -> Any:
+    return stripe.Customer.delete(user.stripe_customer_id)
+
+
+@customer_id_required
 def create_checkout(user: UserProtocol, mode: str, line_items: List[Dict[str, Any]],
                     **kwargs) -> stripe.checkout.Session:
-    checkout_session = stripe.checkout.Session.create(
+    return stripe.checkout.Session.create(
         client_reference_id=user.id,
         customer=user.stripe_customer_id,
         mode=mode,
         line_items=line_items,
         **kwargs
     )
-    return checkout_session
 
 
 def create_subscription_checkout(user: UserProtocol, price_id: str, **kwargs) -> stripe.checkout.Session:
@@ -76,40 +73,61 @@ def list_active_subscriptions(user: UserProtocol, **kwargs):
     return list_subscriptions(user, status='active', **kwargs)
 
 
-def check_subscription_product_id(sub: stripe.Subscription) -> str:
+def _check_subscription_product_id(sub: stripe.Subscription) -> str:
     return sub.get('plan', {}).get('product', None)
 
 
-def check_subscription_price_id(sub: stripe.Subscription) -> str:
+def _check_subscription_url(sub: stripe.Subscription) -> str:
+    return sub.get('plan', {}).get('url', None)
+
+
+def _check_subscription_price_id(sub: stripe.Subscription) -> str:
     return sub.get('plan', {}).get('id', None)
+
+
+def _check_subscription_cancel_at(sub: stripe.Subscription) -> Optional[int]:
+    return sub.get('cancel_at', None)
 
 
 def list_products_subscribed_to(user: UserProtocol, **kwargs) -> List[Tuple[str, int]]:
     subscriptions = list_active_subscriptions(user, **kwargs)
-    return [(check_subscription_product_id(sub), sub.get('cancel_at', None)) for sub in subscriptions]
+    return [(_check_subscription_product_id(sub),
+             _check_subscription_cancel_at(sub)) for sub in subscriptions]
+
+
+def list_urls_subscribed_to(user: UserProtocol, **kwargs) -> List[Tuple[str, int]]:
+    subscriptions = list_active_subscriptions(user, **kwargs)
+    return [(_check_subscription_url(sub), sub.get('cancel_at', None)) for sub in subscriptions]
 
 
 def list_prices_subscribed_to(user: UserProtocol, **kwargs) -> List[str]:
     subscriptions = list_active_subscriptions(user, **kwargs)
-    return [check_subscription_price_id(sub) for sub in subscriptions]
+    return [_check_subscription_price_id(sub) for sub in subscriptions]
 
 
-def is_subscribed_and_cancelled_time(user: UserProtocol, product_id: str) -> Dict[str, Any]:
-    for sub in list_products_subscribed_to(user):
-        if sub[0] == product_id:
-            return {'subscribed': True, 'cancel_at': sub[1]}
+def is_subscribed_and_cancelled_time(user: UserProtocol, product_id: Optional[str] = None,
+                                     url: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+    if not product_id and not url:
+        raise SubscriptionArgsMissingException
+    for sub in list_active_subscriptions(user, **kwargs):
+        if _check_subscription_product_id(sub) == product_id or _check_subscription_url(sub) == url:
+            return {'subscribed': True, 'cancel_at': _check_subscription_cancel_at(sub)}
     return {'subscribed': False, 'cancel_at': None}
 
 
-def is_subscribed(user: UserProtocol, product_id: str) -> bool:
-    return is_subscribed_and_cancelled_time(user, product_id)['subscribed']
+def is_subscribed(user: UserProtocol, product_id: str = None, url: str = None) -> bool:
+    return is_subscribed_and_cancelled_time(user, product_id, url)['subscribed']
 
 
-def is_subscribed_with_cache(user: UserProtocol, product_id: str, cache: CacheProtocol) -> bool:
-    cache_key = f'is_subscribed_{user.id}'
+def is_subscribed_with_cache(user: UserProtocol, cache: CacheProtocol,
+                             product_id: Optional[str] = None, url: Optional[str] = None) -> bool:
+    """ Need to keep under 250 characters for memcached"""
+    sanitized_url = quote(url)[-150:] if url else ''
+    sanitizied_userid = str(user.id)[-80:]
+    cache_key = f'is_subscribed_{product_id or sanitized_url}_{sanitizied_userid}'
     subscribed = cache.get(cache_key)
     if subscribed is None:
-        subscribed = is_subscribed(user, product_id)
+        subscribed = is_subscribed(user, product_id, url)
         if subscribed:
             cache.set(cache_key, subscribed)
     return subscribed
@@ -129,7 +147,7 @@ def create_subscription(user: UserProtocol, price_id: str, **kwargs) -> stripe.S
 def cancel_subscription(user: UserProtocol, product_id: str) -> bool:
     sub_cancelled = False
     for sub in list_subscriptions(user):
-        if check_subscription_product_id(sub) == product_id:
+        if _check_subscription_product_id(sub) == product_id:
             sub_id = sub['id']
             stripe.Subscription.delete(sub_id)
             sub_cancelled = True
@@ -140,8 +158,8 @@ def _minimize_price(price: Dict[str, Any]) -> Dict[str, Any]:
     return {k: price[k] for k in ['id', 'recurring', 'type', 'unit_amount', 'unit_amount_decimal']}
 
 
-def get_subscription_prices(user: UserProtocol, product_id: str, **kwargs) -> List[Dict[str, Any]]:
-    response = stripe.Price.list(active=True, product=product_id, **kwargs)
+def get_subscription_prices(user: Optional[UserProtocol] = None, **kwargs) -> List[Dict[str, Any]]:
+    response = stripe.Price.list(active=True, **kwargs)
     prices = [_minimize_price(p) for p in response['data']]
     if user:
         subscribed_prices = list_prices_subscribed_to(user)
@@ -150,8 +168,3 @@ def get_subscription_prices(user: UserProtocol, product_id: str, **kwargs) -> Li
     for p in prices:
         p['subscribed'] = p['id'] in subscribed_prices
     return prices
-
-
-@customer_id_required
-def delete_customer(user: UserProtocol) -> Any:
-    return stripe.Customer.delete(user.stripe_customer_id)
