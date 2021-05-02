@@ -1,7 +1,6 @@
 import stripe
 from .decorators import customer_id_required
 from .exceptions import StripeCustomerIdRequired, SubscriptionArgsMissingException
-from urllib.parse import quote
 from . import tests
 from .types import UserProtocol, CacheProtocol
 from .__version__ import version
@@ -77,10 +76,6 @@ def _check_subscription_product_id(sub: stripe.Subscription) -> str:
     return sub.get('plan', {}).get('product', None)
 
 
-def _check_subscription_url(sub: stripe.Subscription) -> str:
-    return sub.get('plan', {}).get('url', None)
-
-
 def _check_subscription_price_id(sub: stripe.Subscription) -> str:
     return sub.get('plan', {}).get('id', None)
 
@@ -89,45 +84,37 @@ def _check_subscription_cancel_at(sub: stripe.Subscription) -> Optional[int]:
     return sub.get('cancel_at', None)
 
 
-def list_products_subscribed_to(user: UserProtocol, **kwargs) -> List[Tuple[str, int]]:
+def list_products_subscribed_to(user: UserProtocol, **kwargs) -> List[Dict[str, Any]]:
     subscriptions = list_active_subscriptions(user, **kwargs)
-    return [(_check_subscription_product_id(sub),
-             _check_subscription_cancel_at(sub)) for sub in subscriptions]
+    return [{'product_id': _check_subscription_product_id(sub),
+             'cancel_at': _check_subscription_cancel_at(sub)} for sub in subscriptions]
 
 
-def list_urls_subscribed_to(user: UserProtocol, **kwargs) -> List[Tuple[str, int]]:
+def list_prices_subscribed_to(user: UserProtocol, **kwargs) -> List[Dict[str, Any]]:
     subscriptions = list_active_subscriptions(user, **kwargs)
-    return [(_check_subscription_url(sub), sub.get('cancel_at', None)) for sub in subscriptions]
+    return [{'price_id': _check_subscription_price_id(sub),
+             'cancel_at': _check_subscription_cancel_at(sub)} for sub in subscriptions]
 
 
-def list_prices_subscribed_to(user: UserProtocol, **kwargs) -> List[str]:
-    subscriptions = list_active_subscriptions(user, **kwargs)
-    return [_check_subscription_price_id(sub) for sub in subscriptions]
-
-
-def is_subscribed_and_cancelled_time(user: UserProtocol, product_id: Optional[str] = None,
-                                     url: Optional[str] = None, **kwargs) -> Dict[str, Any]:
-    if not product_id and not url:
-        raise SubscriptionArgsMissingException
+def is_subscribed_and_cancelled_time(user: UserProtocol, product_id: Optional[str] = None, **kwargs) -> Dict[str, Any]:
     for sub in list_active_subscriptions(user, **kwargs):
-        if _check_subscription_product_id(sub) == product_id or _check_subscription_url(sub) == url:
+        if _check_subscription_product_id(sub) == product_id:
             return {'subscribed': True, 'cancel_at': _check_subscription_cancel_at(sub)}
     return {'subscribed': False, 'cancel_at': None}
 
 
-def is_subscribed(user: UserProtocol, product_id: str = None, url: str = None) -> bool:
-    return is_subscribed_and_cancelled_time(user, product_id, url)['subscribed']
+def is_subscribed(user: UserProtocol, product_id: str = None) -> bool:
+    return is_subscribed_and_cancelled_time(user, product_id)['subscribed']
 
 
 def is_subscribed_with_cache(user: UserProtocol, cache: CacheProtocol,
-                             product_id: Optional[str] = None, url: Optional[str] = None) -> bool:
+                             product_id: Optional[str] = None) -> bool:
     """ Need to keep under 250 characters for memcached"""
-    sanitized_url = quote(url)[-150:] if url else ''
-    sanitizied_userid = str(user.id)[-80:]
-    cache_key = f'is_subscribed_{product_id or sanitized_url}_{sanitizied_userid}'
+    sanitized_userid = str(user.id)[-80:]
+    cache_key = f'is_subscribed_{product_id}_{sanitized_userid}'
     subscribed = cache.get(cache_key)
     if subscribed is None:
-        subscribed = is_subscribed(user, product_id, url)
+        subscribed = is_subscribed(user, product_id)
         if subscribed:
             cache.set(cache_key, subscribed)
     return subscribed
@@ -166,5 +153,29 @@ def get_subscription_prices(user: Optional[UserProtocol] = None, **kwargs) -> Li
     else:
         subscribed_prices = []
     for p in prices:
-        p['subscribed'] = p['id'] in subscribed_prices
+        for s in subscribed_prices:
+            if s['product_id'] == p['id']:
+                p['subscribed'] = True
+                p['cancel_at'] = s['cancel_at']
     return prices
+
+
+def get_subscription_products_and_prices(user: Optional[UserProtocol] = None,
+                                         price_kwargs: Optional[Dict[str, Any]] = None,
+                                         **kwargs) -> List[Dict[str, Any]]:
+    products = stripe.Product.list(active=True, **kwargs)
+    price_kwargs = price_kwargs or {}
+    prices = get_subscription_prices(user, **price_kwargs)
+    for product in products:
+        products['prices'] = []
+        product['subscription_info'] = {'subscribed': False, 'cancel_at': None}
+    for price in products:
+        product_id = price.get('product', None)
+        if product_id:
+            for product in products:
+                if product_id == product['id']:
+                    product['prices'].append(_minimize_price(price))
+                    if price['subscribed']:
+                        product['subscription_info'] = {'subscribed': True, 'cancel_at': price['cancel_at']}
+
+
