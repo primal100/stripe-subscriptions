@@ -66,8 +66,8 @@ def test_is_not_subscribed_with_cache(user, stripe_subscription_product_id, cach
 
 
 def test_list_active_subscriptions_subscribed_user(subscribed_user, stripe_subscription_product_id):
-    is_subscribed = subscriptions.list_products_subscribed_to(subscribed_user)
-    assert is_subscribed == [(stripe_subscription_product_id, None)]
+    subscribed_to = subscriptions.list_products_subscribed_to(subscribed_user)
+    assert subscribed_to == [{'product_id': stripe_subscription_product_id, 'cancel_at': None}]
 
 
 def test_list_active_subscriptions_user_no_customer_id(user):
@@ -81,8 +81,8 @@ def test_list_active_subscriptions_user_with_customer_id(user_with_customer_id):
 
 
 def test_list_prices_subscribed_to_subscribed_user(subscribed_user, stripe_price_id):
-    is_subscribed = subscriptions.list_prices_subscribed_to(subscribed_user)
-    assert is_subscribed == [stripe_price_id]
+    subscribed_to = subscriptions.list_prices_subscribed_to(subscribed_user)
+    assert subscribed_to == [{'cancel_at': None, 'price_id': stripe_price_id}]
 
 
 def test_list_prices_subscribed_to_user_no_subscriptions(user):
@@ -90,9 +90,17 @@ def test_list_prices_subscribed_to_user_no_subscriptions(user):
     assert is_subscribed == []
 
 
-def test_get_subscription_prices(user, expected_subscription_prices):
-    prices = subscriptions.get_subscription_prices(user)
+def test_get_subscription_prices(subscribed_user, expected_subscription_prices, stripe_subscription_product_id):
+    prices = subscriptions.get_subscription_prices(subscribed_user, product=stripe_subscription_product_id)
     assert prices == expected_subscription_prices
+
+
+def test_get_subscription_products_and_prices(subscribed_user, expected_subscription_products_and_prices,
+                                              stripe_subscription_product_id, stripe_unsubscribed_product_id):
+    products = subscriptions.get_subscription_products_and_prices(subscribed_user,
+                                                                  ids=[stripe_subscription_product_id,
+                                                                       stripe_unsubscribed_product_id])
+    assert products == expected_subscription_products_and_prices
 
 
 def test_subscription_lifecycle(user, stripe_price_id, stripe_subscription_product_id):

@@ -1,11 +1,12 @@
 import stripe
+from concurrent.futures import ThreadPoolExecutor
 from .decorators import customer_id_required
 from .exceptions import StripeCustomerIdRequired, SubscriptionArgsMissingException
 from . import tests
 from .types import UserProtocol, CacheProtocol
 from .__version__ import version
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 
 app_name = 'stripe-subscriptions'
@@ -13,6 +14,9 @@ app_url = "https://github.com/primal100/stripe-subscriptions"
 
 
 stripe.set_app_info(app_name, version=version, url=app_url)
+
+
+executor = ThreadPoolExecutor()
 
 
 class User(UserProtocol):
@@ -56,19 +60,18 @@ def create_subscription_checkout(user: UserProtocol, price_id: str, **kwargs) ->
         ], **kwargs)
 
 
-def list_subscriptions(user: UserProtocol, **kwargs):
+def list_subscriptions(user: UserProtocol, **kwargs) -> List[stripe.Subscription]:
     if user.stripe_customer_id:
         subscriptions = stripe.Subscription.list(customer=user.stripe_customer_id, **kwargs)
         return subscriptions['data']
     return []
 
 
-def get_all_subscription_info(user: UserProtocol, **kwargs):
-    data = list_subscriptions(user, status='all', **kwargs)
-    return data
+def get_all_subscription_info(user: UserProtocol, **kwargs) -> List[stripe.Subscription]:
+    return list_subscriptions(user, status='all', **kwargs)
 
 
-def list_active_subscriptions(user: UserProtocol, **kwargs):
+def list_active_subscriptions(user: UserProtocol, **kwargs) -> List[stripe.Subscription]:
     return list_subscriptions(user, status='active', **kwargs)
 
 
@@ -91,7 +94,7 @@ def list_products_subscribed_to(user: UserProtocol, **kwargs) -> List[Dict[str, 
 
 
 def list_prices_subscribed_to(user: UserProtocol, **kwargs) -> List[Dict[str, Any]]:
-    subscriptions = list_active_subscriptions(user, **kwargs)
+    subscriptions = list_active_subscriptions(user, limit=100, **kwargs)
     return [{'price_id': _check_subscription_price_id(sub),
              'cancel_at': _check_subscription_cancel_at(sub)} for sub in subscriptions]
 
@@ -141,41 +144,57 @@ def cancel_subscription(user: UserProtocol, product_id: str) -> bool:
     return sub_cancelled
 
 
-def _minimize_price(price: Dict[str, Any]) -> Dict[str, Any]:
-    return {k: price[k] for k in ['id', 'recurring', 'type', 'unit_amount', 'unit_amount_decimal']}
+def _minimize_price(price: Dict[str, Any], include_product_id: bool = True) -> Dict[str, Any]:
+    keys = ['id', 'recurring', 'type', 'currency', 'unit_amount', 'unit_amount_decimal', 'nickname', 'metadata']
+    if include_product_id:
+        keys.append('product')
+    return {k: price[k] for k in keys}
+
+
+def get_active_prices(include_product_id: bool = True, **kwargs) -> List[Dict[str, Any]]:
+    response = stripe.Price.list(active=True, **kwargs)
+    return [_minimize_price(p, include_product_id=include_product_id) for p in response['data']]
 
 
 def get_subscription_prices(user: Optional[UserProtocol] = None, **kwargs) -> List[Dict[str, Any]]:
-    response = stripe.Price.list(active=True, **kwargs)
-    prices = [_minimize_price(p) for p in response['data']]
-    if user:
-        subscribed_prices = list_prices_subscribed_to(user)
-    else:
-        subscribed_prices = []
+    price_future = executor.submit(get_active_prices, **kwargs)
+    subscribed_prices_future = executor.submit(list_prices_subscribed_to, user)
+    prices = price_future.result()
+    subscribed_prices = subscribed_prices_future.result()
     for p in prices:
+        p['subscription_info'] = {'subscribed': False, 'cancel_at': None}
         for s in subscribed_prices:
-            if s['product_id'] == p['id']:
-                p['subscribed'] = True
-                p['cancel_at'] = s['cancel_at']
+            if s['price_id'] == p['id']:
+                p['subscription_info'] = {'subscribed': True, 'cancel_at': s['cancel_at']}
     return prices
+
+
+def _minimize_product(product: Dict[str, Any]) -> Dict[str, Any]:
+    keys = ['id', 'images', 'type', 'name', 'shippable', 'type', 'unit_label', 'url', 'metadata']
+    return {k: product[k] for k in keys}
+
+
+def get_active_products(**kwargs) -> List[Dict[str, Any]]:
+    response = stripe.Product.list(active=True, **kwargs)
+    return [_minimize_product(product) for product in response]
 
 
 def get_subscription_products_and_prices(user: Optional[UserProtocol] = None,
                                          price_kwargs: Optional[Dict[str, Any]] = None,
                                          **kwargs) -> List[Dict[str, Any]]:
-    products = stripe.Product.list(active=True, **kwargs)
+    products_future = executor.submit(get_active_products, **kwargs)
     price_kwargs = price_kwargs or {}
     prices = get_subscription_prices(user, **price_kwargs)
+    products = products_future.result()
     for product in products:
-        products['prices'] = []
+        product['prices'] = []
         product['subscription_info'] = {'subscribed': False, 'cancel_at': None}
-    for price in products:
-        product_id = price.get('product', None)
+    for price in prices:
+        product_id = price.pop('product', None)
         if product_id:
             for product in products:
                 if product_id == product['id']:
-                    product['prices'].append(_minimize_price(price))
-                    if price['subscribed']:
-                        product['subscription_info'] = {'subscribed': True, 'cancel_at': price['cancel_at']}
-
-
+                    product['prices'].append(price)
+                    if price['subscription_info']['subscribed']:
+                        product['subscription_info'] = price['subscription_info']
+    return products
