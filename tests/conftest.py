@@ -1,5 +1,6 @@
 import os
 
+import sys
 import pytest
 import stripe
 from datetime import datetime, timedelta
@@ -10,6 +11,8 @@ from subscriptions import UserProtocol, CacheProtocol, User
 from typing import Optional, Any, List
 
 api_key = ''
+python_version = sys.version_info
+ci_string = f'{os.name}-{python_version.major}{python_version.minor}'
 
 
 def pytest_addoption(parser):
@@ -48,7 +51,7 @@ def payment_method_types() -> List[str]:
 
 @pytest.fixture
 def user_email() -> str:
-    return 'stripe-subscriptions@example.com'
+    return f'stripe-subscriptions-{ci_string}@example.com'
 
 
 @pytest.fixture
@@ -64,7 +67,7 @@ def user_with_customer_id(user, user_email) -> UserProtocol:
     customers = stripe.Customer.list(email=user_email)
     for customer in customers:
         stripe.Customer.delete(customer['id'])
-    subscriptions.create_customer(user)
+    subscriptions.create_customer(user, description="stripe-subscriptions test runner user")
     return user
 
 
