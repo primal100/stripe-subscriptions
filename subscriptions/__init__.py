@@ -36,7 +36,9 @@ def create_customer(user: UserProtocol, **kwargs) -> stripe.Customer:
 
 @customer_id_required
 def delete_customer(user: UserProtocol) -> Any:
-    return stripe.Customer.delete(user.stripe_customer_id)
+    response = stripe.Customer.delete(user.stripe_customer_id)
+    user.stripe_customer_id = None
+    return response
 
 
 @customer_id_required
