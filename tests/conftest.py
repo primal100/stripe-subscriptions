@@ -55,7 +55,7 @@ def user_email() -> str:
 def user(user_email) -> UserProtocol:
     user = User(user_id=1, email=user_email)
     yield user
-    if user.stripe_customer_id:
+    if user.stripe_customer_id and stripe.Customer.retrieve(user.stripe_customer_id):
         subscriptions.delete_customer(user)
 
 
