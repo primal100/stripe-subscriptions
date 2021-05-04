@@ -20,7 +20,6 @@ setup(
     long_description=readme,
     classifiers=[
         'Development Status :: 5 - Production/Stable',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
@@ -28,7 +27,7 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
     ],
-    python_requires='>=3.5',
+    python_requires='>=3.6',
     setup_requires=['wheel'],
     install_requires=["stripe"],
 )
