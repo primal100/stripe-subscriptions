@@ -45,7 +45,6 @@ def delete_customer(user: UserProtocol) -> Any:
 def create_checkout(user: UserProtocol, mode: str, line_items: List[Dict[str, Any]],
                     **kwargs) -> stripe.checkout.Session:
     return stripe.checkout.Session.create(
-        client_reference_id=user.id,
         customer=user.stripe_customer_id,
         mode=mode,
         line_items=line_items,
