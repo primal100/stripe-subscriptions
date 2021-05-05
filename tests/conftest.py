@@ -55,6 +55,11 @@ def user_email() -> str:
 
 
 @pytest.fixture
+def user_alternative_email() -> str:
+    return f'stripe-subscriptions-alternative{ci_string}@example.com'
+
+
+@pytest.fixture
 def user(user_email) -> UserProtocol:
     user = User(user_id=1, email=user_email)
     yield user
@@ -62,13 +67,24 @@ def user(user_email) -> UserProtocol:
         subscriptions.delete_customer(user)
 
 
-@pytest.fixture
-def user_with_customer_id(user, user_email) -> UserProtocol:
-    customers = stripe.Customer.list(email=user_email)
+def create_customer_id(user) -> UserProtocol:
+    customers = stripe.Customer.list(email=user.email)
     for customer in customers:
         stripe.Customer.delete(customer['id'])
     subscriptions.create_customer(user, description="stripe-subscriptions test runner user")
     return user
+
+
+@pytest.fixture
+def user_with_customer_id(user) -> UserProtocol:
+    return create_customer_id(user)
+
+
+@pytest.fixture(params=["no-customer-id", "with-customer-id"])
+def user_with_and_without_customer_id(request, user):
+    if request.param == "no-customer-id":
+        return user
+    return create_customer_id(user)
 
 
 @pytest.fixture
