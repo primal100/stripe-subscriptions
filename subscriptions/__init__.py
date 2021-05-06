@@ -61,8 +61,8 @@ def create_subscription_checkout(user: UserProtocol, price_id: str, **kwargs) ->
         ], **kwargs)
 
 
-def list_subscriptions(user: UserProtocol, **kwargs) -> List[stripe.Subscription]:
-    if user.stripe_customer_id:
+def list_subscriptions(user: Optional[UserProtocol], **kwargs) -> List[stripe.Subscription]:
+    if user and user.stripe_customer_id:
         subscriptions = stripe.Subscription.list(customer=user.stripe_customer_id, **kwargs)
         return subscriptions['data']
     return []
@@ -111,9 +111,11 @@ def is_subscribed(user: UserProtocol, product_id: str = None) -> bool:
     return is_subscribed_and_cancelled_time(user, product_id)['subscribed']
 
 
-def is_subscribed_with_cache(user: UserProtocol, cache: CacheProtocol,
+def is_subscribed_with_cache(user: Optional[UserProtocol], cache: CacheProtocol,
                              product_id: Optional[str] = None) -> bool:
     """ Need to keep under 250 characters for memcached"""
+    if not user or not user.stripe_customer_id:
+        return False
     sanitized_userid = str(user.id)[-80:]
     cache_key = f'is_subscribed_{product_id}_{sanitized_userid}'
     subscribed = cache.get(cache_key)
@@ -145,16 +147,15 @@ def cancel_subscription(user: UserProtocol, product_id: str) -> bool:
     return sub_cancelled
 
 
-def _minimize_price(price: Dict[str, Any], include_product_id: bool = True) -> Dict[str, Any]:
-    keys = ['id', 'recurring', 'type', 'currency', 'unit_amount', 'unit_amount_decimal', 'nickname', 'metadata']
-    if include_product_id:
-        keys.append('product')
+def _minimize_price(price: Dict[str, Any]) -> Dict[str, Any]:
+    keys = ['id', 'recurring', 'type', 'currency', 'unit_amount', 'unit_amount_decimal', 'nickname',
+            'product', 'metadata']
     return {k: price[k] for k in keys}
 
 
-def get_active_prices(include_product_id: bool = True, **kwargs) -> List[Dict[str, Any]]:
+def get_active_prices(**kwargs) -> List[Dict[str, Any]]:
     response = stripe.Price.list(active=True, **kwargs)
-    return [_minimize_price(p, include_product_id=include_product_id) for p in response['data']]
+    return [_minimize_price(p) for p in response['data']]
 
 
 def get_subscription_prices(user: Optional[UserProtocol] = None, **kwargs) -> List[Dict[str, Any]]:
