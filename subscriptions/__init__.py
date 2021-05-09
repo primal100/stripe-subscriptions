@@ -42,7 +42,7 @@ def delete_customer(user: UserProtocol) -> Any:
 
 
 @customer_id_required
-def create_checkout(user: UserProtocol, mode: str, line_items: List[Dict[str, Any]],
+def create_checkout(user: UserProtocol, mode: str, line_items: List[Dict[str, Any]] = None,
                     **kwargs) -> stripe.checkout.Session:
     return stripe.checkout.Session.create(
         customer=user.stripe_customer_id,
@@ -59,6 +59,10 @@ def create_subscription_checkout(user: UserProtocol, price_id: str, **kwargs) ->
                 'quantity': 1
             },
         ], **kwargs)
+
+
+def create_setup_checkout(user: UserProtocol, **kwargs) -> stripe.checkout.Session:
+    return create_checkout(user, "setup", **kwargs)
 
 
 def list_subscriptions(user: Optional[UserProtocol], **kwargs) -> List[stripe.Subscription]:
