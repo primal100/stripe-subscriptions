@@ -1,4 +1,6 @@
 import pytest
+import stripe
+
 import subscriptions
 
 
@@ -132,9 +134,9 @@ def test_product_list_unsubscribed(no_user_and_user_with_and_without_customer_id
     assert result == expected_subscription_products_and_prices_unsubscribed
 
 
-def test_create_subscription(user_with_payment_method, stripe_price_id, stripe_subscription_product_id):
-    subscriptions.create_subscription(user_with_payment_method, stripe_price_id)
-    response = subscriptions.is_subscribed_and_cancelled_time(user_with_payment_method, stripe_subscription_product_id)
+def test_create_subscription(user_with_customer_id, payment_method, stripe_price_id, stripe_subscription_product_id):
+    subscriptions.create_subscription(user_with_customer_id, stripe_price_id)
+    response = subscriptions.is_subscribed_and_cancelled_time(user_with_customer_id, stripe_subscription_product_id)
     assert response['subscribed'] is True
     assert response['cancel_at'] is None
 
@@ -146,6 +148,48 @@ def test_create_subscription_no_customer_id(none_or_user, stripe_price_id, strip
                                                               stripe_subscription_product_id)
     assert response['subscribed'] is False
     assert response['cancel_at'] is None
+
+
+def test_list_payment_methods(user_with_customer_id, payment_method_saved):
+    payment_methods = subscriptions.list_payment_methods(user_with_customer_id, "card")
+    assert payment_methods == [payment_method_saved]
+
+
+def test_list_all_payment_methods(user_with_customer_id, payment_method_saved):
+    payment_methods = subscriptions.list_payment_methods_multiple_types(
+        user_with_customer_id, types=["card", "alipay"]
+    )
+    assert list(payment_methods) == [payment_method_saved]
+
+
+def test_detach_payment_method(user_with_customer_id, payment_method_saved):
+    payment_method = subscriptions.detach_payment_method(user_with_customer_id, payment_method_saved['id'])
+    assert not payment_method['customer']
+
+
+def test_detach_payment_method_wrong_customer(payment_method_saved, wrong_customer_id):
+    with pytest.raises(subscriptions.exceptions.StripeWrongCustomer):
+        subscriptions.detach_payment_method(wrong_customer_id, payment_method_saved['id'])
+
+
+def test_detach_all_payment_methods(user_with_customer_id, payment_method_saved):
+    num = subscriptions.detach_all_payment_methods(user_with_customer_id, types=["card", "alipay"])
+    assert num == 1
+    payment_method = stripe.PaymentMethod.retrieve(payment_method_saved["id"])
+    assert payment_method["customer"] is None
+
+
+def test_detach_all_payment_methods_none(no_user_and_user_with_and_without_customer_id):
+    num = subscriptions.detach_all_payment_methods(no_user_and_user_with_and_without_customer_id,
+                                                   types=["card", "alipay"])
+    assert num == 0
+
+
+def test_create_setup_intent(user_with_customer_id):
+    setup_intent = subscriptions.create_setup_intent(user_with_customer_id, payment_method_types=["card"])
+    assert setup_intent['id'] is not None
+    assert setup_intent['client_secret'] is not None
+    assert setup_intent['payment_method_types'] == ['card']
 
 
 def test_cancel_subscription(subscribed_user, stripe_subscription_product_id):

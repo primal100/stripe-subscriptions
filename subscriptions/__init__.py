@@ -1,12 +1,13 @@
 import stripe
 from concurrent.futures import ThreadPoolExecutor
 from .decorators import customer_id_required
-from .exceptions import StripeCustomerIdRequired, SubscriptionArgsMissingException
+from .exceptions import StripeCustomerIdRequired, SubscriptionArgsMissingException, StripeWrongCustomer
+import itertools
 from . import tests
-from .types import UserProtocol, CacheProtocol
+from .types import UserProtocol, CacheProtocol, PaymentMethodType
 from .__version__ import version
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Generator
 
 
 app_name = 'stripe-subscriptions'
@@ -204,3 +205,53 @@ def get_subscription_products_and_prices(user: Optional[UserProtocol] = None,
                     if price['subscription_info']['subscribed']:
                         product['subscription_info'] = price['subscription_info']
     return products
+
+
+@customer_id_required
+def create_setup_intent(user, payment_method_types: List[PaymentMethodType] = None, **kwargs) -> stripe.SetupIntent:
+    setup_intent_kwargs = {
+        'customer': user.stripe_customer_id,
+        'confirm': False,
+        'payment_method_types': payment_method_types,
+        'usage': "off_session"}
+    setup_intent_kwargs.update(kwargs)
+    return stripe.SetupIntent.create(**setup_intent_kwargs)
+
+
+def list_payment_methods(user: Optional[UserProtocol], type: PaymentMethodType, **kwargs) -> List[stripe.PaymentMethod]:
+    if not user or user.stripe_customer_id:
+        return stripe.PaymentMethod.list(customer=user.stripe_customer_id, type=type, **kwargs)['data']
+    return []
+
+
+def list_payment_methods_multiple_types(user: Optional[UserProtocol], types: List[PaymentMethodType],
+                                        **kwargs) -> Generator[stripe.PaymentMethod, None, None]:
+    """
+    Stripe only allows to retrieve payment methods for a single type at a time.
+    This functions gathers payment methods from multiple types
+    """
+    if not user or not user.stripe_customer_id or len(types) == 0:
+        yield from []
+    if len(types) == 1:
+        yield from list_payment_methods(user, types[0], **kwargs)
+    futures = [executor.submit(list_payment_methods,
+                               user, type=payment_type, **kwargs)
+               for payment_type in types]
+    yield from list(itertools.chain(*[f.result() for f in futures]))
+
+
+@customer_id_required
+def detach_payment_method(user: Optional[UserProtocol], payment_method_id: str) -> stripe.PaymentMethod:
+    payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
+    if not payment_method['customer'] == user.stripe_customer_id:
+        raise StripeWrongCustomer(f"Customer {user.stripe_customer_id} does not own payment method {payment_method_id}")
+    return stripe.PaymentMethod.detach(payment_method)
+
+
+def detach_all_payment_methods(user: Optional[UserProtocol], types: List[PaymentMethodType], **kwargs) -> int:
+    i = 0
+    if user and user.stripe_customer_id:
+        for payment_method in list_payment_methods_multiple_types(user, types, **kwargs):
+            stripe.PaymentMethod.detach(payment_method)
+            i += 1
+    return i
