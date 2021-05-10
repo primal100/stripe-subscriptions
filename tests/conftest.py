@@ -70,6 +70,16 @@ def none_or_user(request, user) -> Optional[UserProtocol]:
 
 
 @pytest.fixture
+def wrong_customer_id() -> UserProtocol:
+    user = User(
+        2,
+        "abc@yahoo.com",
+        'cus_1234567890ABCD'
+    )
+    return user
+
+
+@pytest.fixture
 def user_with_customer_id(user, user_email) -> UserProtocol:
     customers = stripe.Customer.list(email=user_email)
     for customer in customers:
@@ -97,15 +107,22 @@ def no_user_and_user_with_and_without_customer_id(request, user) -> Optional[Use
 
 
 @pytest.fixture
-def user_with_payment_method(user_with_customer_id) -> UserProtocol:
-    subscriptions.tests.create_payment_method(user_with_customer_id)
-    return user_with_customer_id
+def payment_method(user_with_customer_id) -> stripe.PaymentMethod:
+    payment_method = subscriptions.tests.create_payment_method(user_with_customer_id)
+    return payment_method
 
 
 @pytest.fixture
-def subscribed_user(user_with_payment_method, stripe_price_id) -> UserProtocol:
-    subscriptions.create_subscription(user_with_payment_method, stripe_price_id)
-    return user_with_payment_method
+def payment_method_saved(user_with_customer_id, payment_method) -> stripe.PaymentMethod:
+    payment_method['customer'] = user_with_customer_id.stripe_customer_id
+    payment_method['card']['checks']['cvc_check'] = "pass"
+    return payment_method
+
+
+@pytest.fixture
+def subscribed_user(user_with_customer_id, payment_method, stripe_price_id) -> UserProtocol:
+    subscriptions.create_subscription(user_with_customer_id, stripe_price_id)
+    return user_with_customer_id
 
 
 @pytest.fixture(scope="session")

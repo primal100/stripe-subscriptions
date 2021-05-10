@@ -2,6 +2,10 @@ class StripeCustomerIdRequired(BaseException):
     pass
 
 
+class StripeWrongCustomer(BaseException):
+    pass
+
+
 class MissingArgsException(BaseException):
     pass
 
