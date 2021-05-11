@@ -237,7 +237,7 @@ def list_payment_methods_multiple_types(user: Optional[UserProtocol], types: Lis
     futures = [executor.submit(list_payment_methods,
                                user, type=payment_type, **kwargs)
                for payment_type in types]
-    yield from list(itertools.chain(*[f.result() for f in futures]))
+    yield from itertools.chain(*[f.result() for f in futures])
 
 
 @customer_id_required
