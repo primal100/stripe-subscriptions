@@ -134,23 +134,6 @@ def test_product_list_unsubscribed(no_user_and_user_with_and_without_customer_id
     assert result == expected_subscription_products_and_prices_unsubscribed
 
 
-def test_create_subscription(user_with_customer_id, default_payment_method_for_customer, stripe_price_id,
-                             stripe_subscription_product_id):
-    subscriptions.create_subscription(user_with_customer_id, stripe_price_id)
-    response = subscriptions.is_subscribed_and_cancelled_time(user_with_customer_id, stripe_subscription_product_id)
-    assert response['subscribed'] is True
-    assert response['cancel_at'] is None
-
-
-def test_create_subscription_no_customer_id(none_or_user, stripe_price_id, stripe_subscription_product_id):
-    with pytest.raises(subscriptions.exceptions.StripeCustomerIdRequired):
-        subscriptions.create_subscription(none_or_user, stripe_price_id)
-    response = subscriptions.is_subscribed_and_cancelled_time(none_or_user,
-                                                              stripe_subscription_product_id)
-    assert response['subscribed'] is False
-    assert response['cancel_at'] is None
-
-
 @pytest.mark.parametrize('payment_types', [
     ["card"],
     ["card", "alipay"],
@@ -206,11 +189,40 @@ def test_create_setup_intent(user_with_customer_id, default_payment_method_saved
     assert setup_intent['payment_method_types'] == ['card']
 
 
+def test_create_subscription(user_with_customer_id, default_payment_method_for_customer, stripe_price_id,
+                             stripe_subscription_product_id):
+    subscriptions.create_subscription(user_with_customer_id, stripe_price_id)
+    response = subscriptions.is_subscribed_and_cancelled_time(user_with_customer_id, stripe_subscription_product_id)
+    assert response['subscribed'] is True
+    assert response['cancel_at'] is None
+
+
+def test_create_subscription_no_customer_id(none_or_user, stripe_price_id, stripe_subscription_product_id):
+    with pytest.raises(subscriptions.exceptions.StripeCustomerIdRequired):
+        subscriptions.create_subscription(none_or_user, stripe_price_id)
+    response = subscriptions.is_subscribed_and_cancelled_time(none_or_user,
+                                                              stripe_subscription_product_id)
+    assert response['subscribed'] is False
+    assert response['cancel_at'] is None
+
+
 def test_cancel_subscription(subscribed_user, stripe_subscription_product_id):
     subscriptions.cancel_subscription(subscribed_user, stripe_subscription_product_id)
     response = subscriptions.is_subscribed_and_cancelled_time(subscribed_user, stripe_subscription_product_id)
     assert response['subscribed'] is False
     assert response['cancel_at'] is None
+
+
+def test_cancel_subscription_wrong_owner():
+    pass
+
+
+def test_modify_subscription():
+    pass
+
+
+def test_modify_subscription_wrong_owner():
+    pass
 
 
 def test_subscription_lifecycle(user, stripe_price_id, stripe_subscription_product_id):
