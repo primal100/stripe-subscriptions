@@ -107,20 +107,19 @@ def no_user_and_user_with_and_without_customer_id(request, user) -> Optional[Use
 
 
 @pytest.fixture
-def payment_method(user_with_customer_id) -> stripe.PaymentMethod:
-    payment_method = subscriptions.tests.create_payment_method(user_with_customer_id)
-    return payment_method
+def default_payment_method_for_customer(user_with_customer_id) -> stripe.PaymentMethod:
+    return subscriptions.tests.create_default_payment_method_for_customer(user_with_customer_id)
 
 
 @pytest.fixture
-def payment_method_saved(user_with_customer_id, payment_method) -> stripe.PaymentMethod:
-    payment_method['customer'] = user_with_customer_id.stripe_customer_id
-    payment_method['card']['checks']['cvc_check'] = "pass"
-    return payment_method
+def payment_method_saved(user_with_customer_id, default_payment_method_for_customer) -> stripe.PaymentMethod:
+    default_payment_method_for_customer['customer'] = user_with_customer_id.stripe_customer_id
+    default_payment_method_for_customer['card']['checks']['cvc_check'] = "pass"
+    return default_payment_method_for_customer
 
 
 @pytest.fixture
-def subscribed_user(user_with_customer_id, payment_method, stripe_price_id) -> UserProtocol:
+def subscribed_user(user_with_customer_id, default_payment_method_for_customer, stripe_price_id) -> UserProtocol:
     subscriptions.create_subscription(user_with_customer_id, stripe_price_id)
     return user_with_customer_id
 
