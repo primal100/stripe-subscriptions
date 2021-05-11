@@ -3,6 +3,7 @@ import os
 import sys
 import pytest
 import stripe
+from stripe.error import InvalidRequestError
 from datetime import datetime, timedelta
 
 import subscriptions
@@ -58,8 +59,11 @@ def user_email() -> str:
 def user(user_email) -> UserProtocol:
     user = User(user_id=1, email=user_email)
     yield user
-    if user.stripe_customer_id and stripe.Customer.retrieve(user.stripe_customer_id):
-        subscriptions.delete_customer(user)
+    if user.stripe_customer_id:
+        try:
+            subscriptions.delete_customer(user)
+        except InvalidRequestError:
+            pass
 
 
 @pytest.fixture(params=[None, "user"])
@@ -83,7 +87,7 @@ def wrong_customer_id() -> UserProtocol:
 def user_with_customer_id(user, user_email) -> UserProtocol:
     customers = stripe.Customer.list(email=user_email)
     for customer in customers:
-        stripe.Customer.delete(customer['id'])
+        stripe.Customer.delete(customer)
     subscriptions.create_customer(user, description="stripe-subscriptions test runner user")
     return user
 
