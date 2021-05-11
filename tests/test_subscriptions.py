@@ -155,12 +155,13 @@ def test_create_subscription_no_customer_id(none_or_user, stripe_price_id, strip
     ["card"],
     ["card", "alipay"],
 ])
-def test_list_payment_methods(user_with_customer_id, payment_method_saved, payment_types):
+def test_list_payment_methods(user_with_customer_id, default_payment_method_saved, payment_method_saved, payment_types):
     payment_methods = subscriptions.list_payment_methods(
         user_with_customer_id, types=payment_types,
     )
-    payment_method_saved['default'] = True
-    assert list(payment_methods) == [payment_method_saved]
+    default_payment_method_saved['default'] = True
+    payment_method_saved['default'] = False
+    assert list(payment_methods) == [payment_method_saved, default_payment_method_saved]
 
 
 @pytest.mark.parametrize('payment_types', [
@@ -175,20 +176,20 @@ def list_payment_methods(none_or_user, payment_types):
     assert list(payment_methods) == []
 
 
-def test_detach_payment_method(user_with_customer_id, payment_method_saved):
-    payment_method = subscriptions.detach_payment_method(user_with_customer_id, payment_method_saved['id'])
+def test_detach_payment_method(user_with_customer_id, default_payment_method_saved):
+    payment_method = subscriptions.detach_payment_method(user_with_customer_id, default_payment_method_saved['id'])
     assert not payment_method['customer']
 
 
-def test_detach_payment_method_wrong_customer(payment_method_saved, wrong_customer_id):
+def test_detach_payment_method_wrong_customer(default_payment_method_saved, wrong_customer_id):
     with pytest.raises(subscriptions.exceptions.StripeWrongCustomer):
-        subscriptions.detach_payment_method(wrong_customer_id, payment_method_saved['id'])
+        subscriptions.detach_payment_method(wrong_customer_id, default_payment_method_saved['id'])
 
 
-def test_detach_all_payment_methods(user_with_customer_id, payment_method_saved):
+def test_detach_all_payment_methods(user_with_customer_id, default_payment_method_saved):
     num = subscriptions.detach_all_payment_methods(user_with_customer_id, types=["card", "alipay"])
     assert num == 1
-    payment_method = stripe.PaymentMethod.retrieve(payment_method_saved["id"])
+    payment_method = stripe.PaymentMethod.retrieve(default_payment_method_saved["id"])
     assert payment_method["customer"] is None
 
 
@@ -198,7 +199,7 @@ def test_detach_all_payment_methods_none(no_user_and_user_with_and_without_custo
     assert num == 0
 
 
-def test_create_setup_intent(user_with_customer_id, payment_method_saved):
+def test_create_setup_intent(user_with_customer_id, default_payment_method_saved):
     setup_intent = subscriptions.create_setup_intent(user_with_customer_id, payment_method_types=["card"])
     assert setup_intent['id'] is not None
     assert setup_intent['client_secret'] is not None
