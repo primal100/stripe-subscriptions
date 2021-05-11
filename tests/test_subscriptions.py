@@ -156,11 +156,27 @@ def test_list_payment_methods(user_with_customer_id, payment_method_saved):
     assert payment_methods == [payment_method_saved]
 
 
-def test_list_all_payment_methods(user_with_customer_id, payment_method_saved):
+@pytest.mark.parametrize('payment_types', [
+    ["card"],
+    ["card", "alipay"],
+])
+def test_list_all_payment_methods(user_with_customer_id, payment_method_saved, payment_types):
     payment_methods = subscriptions.list_payment_methods_multiple_types(
-        user_with_customer_id, types=["card", "alipay"]
+        user_with_customer_id, types=payment_types,
     )
     assert list(payment_methods) == [payment_method_saved]
+
+
+@pytest.mark.parametrize('payment_types', [
+    [],
+    ["card"],
+    ["card", "alipay"],
+])
+def test_list_no_payment_methods(none_or_user, payment_types):
+    payment_methods = subscriptions.list_payment_methods_multiple_types(
+        none_or_user, types=payment_types,
+    )
+    assert list(payment_methods) == []
 
 
 def test_detach_payment_method(user_with_customer_id, payment_method_saved):

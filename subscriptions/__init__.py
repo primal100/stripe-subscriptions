@@ -232,12 +232,13 @@ def list_payment_methods_multiple_types(user: Optional[UserProtocol], types: Lis
     """
     if not user or not user.stripe_customer_id or len(types) == 0:
         yield from []
-    if len(types) == 1:
+    elif len(types) == 1:
         yield from list_payment_methods(user, types[0], **kwargs)
-    futures = [executor.submit(list_payment_methods,
-                               user, type=payment_type, **kwargs)
-               for payment_type in types]
-    yield from itertools.chain(*[f.result() for f in futures])
+    else:
+        futures = [executor.submit(list_payment_methods,
+                                   user, type=payment_type, **kwargs)
+                   for payment_type in types]
+        yield from itertools.chain(*[f.result() for f in futures])
 
 
 @customer_id_required
