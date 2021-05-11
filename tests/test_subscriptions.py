@@ -151,19 +151,15 @@ def test_create_subscription_no_customer_id(none_or_user, stripe_price_id, strip
     assert response['cancel_at'] is None
 
 
-def test_list_payment_methods(user_with_customer_id, payment_method_saved):
-    payment_methods = subscriptions.list_payment_methods(user_with_customer_id, "card")
-    assert payment_methods == [payment_method_saved]
-
-
 @pytest.mark.parametrize('payment_types', [
     ["card"],
     ["card", "alipay"],
 ])
-def test_list_all_payment_methods(user_with_customer_id, payment_method_saved, payment_types):
-    payment_methods = subscriptions.list_payment_methods_multiple_types(
+def test_list_payment_methods(user_with_customer_id, payment_method_saved, payment_types):
+    payment_methods = subscriptions.list_payment_methods(
         user_with_customer_id, types=payment_types,
     )
+    payment_method_saved['default'] = True
     assert list(payment_methods) == [payment_method_saved]
 
 
@@ -172,8 +168,8 @@ def test_list_all_payment_methods(user_with_customer_id, payment_method_saved, p
     ["card"],
     ["card", "alipay"],
 ])
-def test_list_no_payment_methods(none_or_user, payment_types):
-    payment_methods = subscriptions.list_payment_methods_multiple_types(
+def list_payment_methods(none_or_user, payment_types):
+    payment_methods = subscriptions.list_payment_methods(
         none_or_user, types=payment_types,
     )
     assert list(payment_methods) == []
@@ -202,7 +198,7 @@ def test_detach_all_payment_methods_none(no_user_and_user_with_and_without_custo
     assert num == 0
 
 
-def test_create_setup_intent(user_with_customer_id):
+def test_create_setup_intent(user_with_customer_id, payment_method_saved):
     setup_intent = subscriptions.create_setup_intent(user_with_customer_id, payment_method_types=["card"])
     assert setup_intent['id'] is not None
     assert setup_intent['client_secret'] is not None
