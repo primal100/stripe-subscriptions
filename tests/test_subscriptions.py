@@ -134,7 +134,8 @@ def test_product_list_unsubscribed(no_user_and_user_with_and_without_customer_id
     assert result == expected_subscription_products_and_prices_unsubscribed
 
 
-def test_create_subscription(user_with_customer_id, payment_method, stripe_price_id, stripe_subscription_product_id):
+def test_create_subscription(user_with_customer_id, default_payment_method_for_customer, stripe_price_id,
+                             stripe_subscription_product_id):
     subscriptions.create_subscription(user_with_customer_id, stripe_price_id)
     response = subscriptions.is_subscribed_and_cancelled_time(user_with_customer_id, stripe_subscription_product_id)
     assert response['subscribed'] is True
@@ -201,7 +202,7 @@ def test_cancel_subscription(subscribed_user, stripe_subscription_product_id):
 
 def test_subscription_lifecycle(user, stripe_price_id, stripe_subscription_product_id):
     subscriptions.create_customer(user)
-    subscriptions.tests.create_payment_method(user)
+    subscriptions.tests.create_default_payment_method_for_customer(user)
     subscriptions.create_subscription(user, stripe_price_id)
     response = subscriptions.is_subscribed_and_cancelled_time(user, stripe_subscription_product_id)
     assert response['subscribed'] is True
