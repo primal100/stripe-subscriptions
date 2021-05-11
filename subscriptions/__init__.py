@@ -218,27 +218,24 @@ def create_setup_intent(user, payment_method_types: List[PaymentMethodType] = No
     return stripe.SetupIntent.create(**setup_intent_kwargs)
 
 
-def list_payment_methods(user: Optional[UserProtocol], type: PaymentMethodType, **kwargs) -> List[stripe.PaymentMethod]:
-    if not user or user.stripe_customer_id:
-        return stripe.PaymentMethod.list(customer=user.stripe_customer_id, type=type, **kwargs)['data']
-    return []
-
-
-def list_payment_methods_multiple_types(user: Optional[UserProtocol], types: List[PaymentMethodType],
-                                        **kwargs) -> Generator[stripe.PaymentMethod, None, None]:
+def list_payment_methods(user: Optional[UserProtocol], types: List[PaymentMethodType],
+                         **kwargs) -> Generator[stripe.PaymentMethod, None, None]:
     """
     Stripe only allows to retrieve payment methods for a single type at a time.
     This functions gathers payment methods from multiple types
     """
     if not user or not user.stripe_customer_id or len(types) == 0:
         yield from []
-    elif len(types) == 1:
-        yield from list_payment_methods(user, types[0], **kwargs)
     else:
-        futures = [executor.submit(list_payment_methods,
-                                   user, type=payment_type, **kwargs)
+        customer_future = executor.submit(stripe.Customer.retrieve, user.stripe_customer_id)
+        futures = [executor.submit(stripe.PaymentMethod.list,
+                                   customer=user.stripe_customer_id, type=payment_type, **kwargs)
                    for payment_type in types]
-        yield from itertools.chain(*[f.result() for f in futures])
+        customer = customer_future.result()
+        default_payment_method = customer['invoice_settings']['default_payment_method']
+        for payment_method in itertools.chain(*[f.result() for f in futures]):
+            payment_method['default'] = payment_method['id'] == default_payment_method
+            yield payment_method
 
 
 @customer_id_required
@@ -252,7 +249,7 @@ def detach_payment_method(user: Optional[UserProtocol], payment_method_id: str) 
 def detach_all_payment_methods(user: Optional[UserProtocol], types: List[PaymentMethodType], **kwargs) -> int:
     i = 0
     if user and user.stripe_customer_id:
-        for payment_method in list_payment_methods_multiple_types(user, types, **kwargs):
+        for payment_method in list_payment_methods(user, types, **kwargs):
             stripe.PaymentMethod.detach(payment_method)
             i += 1
     return i
