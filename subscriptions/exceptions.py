@@ -1,14 +1,14 @@
-class StripeCustomerIdRequired(BaseException):
+class BaseStripeSubscriptionsError(BaseException):
     pass
 
 
-class StripeWrongCustomer(BaseException):
+class StripeCustomerIdRequired(BaseStripeSubscriptionsError):
     pass
 
 
-class MissingArgsException(BaseException):
+class StripeWrongCustomer(BaseStripeSubscriptionsError):
     pass
 
 
-class SubscriptionArgsMissingException(BaseException):
-    message = "It is required to provide either a product_id or a url"
+class DefaultPaymentMethodRequired(BaseStripeSubscriptionsError):
+    message = "set_as_default_payment_type is True but default_payment_method was not provided."

@@ -135,9 +135,18 @@ def default_payment_method_saved(user_with_customer_id, default_payment_method_f
 
 
 @pytest.fixture
-def subscribed_user(user_with_customer_id, default_payment_method_for_customer, stripe_price_id) -> UserProtocol:
-    subscriptions.create_subscription(user_with_customer_id, stripe_price_id)
-    return user_with_customer_id
+def subscription(user_with_customer_id, default_payment_method_for_customer, stripe_price_id) -> stripe.Subscription:
+    return subscriptions.create_subscription(user_with_customer_id, stripe_price_id)
+
+
+@pytest.fixture
+def non_existing_payment_method_id() -> str:
+    return "pm_ABCDEFGH123456"
+
+
+@pytest.fixture
+def non_existing_subscription_id() -> str:
+    return "sub_ABCDEFGH123456"
 
 
 @pytest.fixture(scope="session")

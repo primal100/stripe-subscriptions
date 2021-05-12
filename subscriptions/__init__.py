@@ -1,7 +1,7 @@
 import stripe
 from concurrent.futures import ThreadPoolExecutor
-from .decorators import customer_id_required
-from .exceptions import StripeCustomerIdRequired, SubscriptionArgsMissingException, StripeWrongCustomer
+from .decorators import customer_id_required, check_if_user_can_update
+from .exceptions import StripeCustomerIdRequired, DefaultPaymentMethodRequired
 import itertools
 from . import tests
 from .types import UserProtocol, CacheProtocol, PaymentMethodType
@@ -132,17 +132,40 @@ def is_subscribed_with_cache(user: Optional[UserProtocol], cache: CacheProtocol,
 
 
 @customer_id_required
-def create_subscription(user: UserProtocol, price_id: str, **kwargs) -> stripe.Subscription:
-    return stripe.Subscription.create(
+def update_default_payment_method_all_subscriptions(user: UserProtocol, default_payment_method: str) -> stripe.Customer:
+    customer_fut = executor.submit(stripe.Customer.modify, user.stripe_customer_id, invoice_settings={
+        'default_payment_method': default_payment_method})
+    subs = list_subscriptions(user)
+    fs = [executor.submit(stripe.Subscription.modify, sub["id"], default_payment_method=default_payment_method)
+          for sub in subs if sub['default_payment_method'] != default_payment_method]
+    [f.result() for f in fs]
+    return customer_fut.result()
+
+
+def _check_default_payment_method_kwargs(set_as_default_payment_method: bool,
+                                         default_payment_method: Optional[str] = None, **kwargs):
+    if set_as_default_payment_method and not default_payment_method:
+        raise DefaultPaymentMethodRequired
+    return set_as_default_payment_method
+
+
+@customer_id_required
+def create_subscription(user: UserProtocol, price_id: str,
+                        set_as_default_payment_method: bool = False, **kwargs) -> stripe.Subscription:
+    _check_default_payment_method_kwargs(set_as_default_payment_method, **kwargs)
+    sub = stripe.Subscription.create(
         customer=user.stripe_customer_id,
         items=[
             {"price": price_id},
         ],
         **kwargs
     )
+    if set_as_default_payment_method:
+        update_default_payment_method_all_subscriptions(user, **kwargs)
+    return sub
 
 
-def cancel_subscription(user: UserProtocol, product_id: str) -> bool:
+def cancel_subscription_for_product(user: UserProtocol, product_id: str) -> bool:
     sub_cancelled = False
     for sub in list_subscriptions(user):
         if _check_subscription_product_id(sub) == product_id:
@@ -150,6 +173,16 @@ def cancel_subscription(user: UserProtocol, product_id: str) -> bool:
             stripe.Subscription.delete(sub_id)
             sub_cancelled = True
     return sub_cancelled
+
+
+@check_if_user_can_update(stripe.Subscription, action="cancel")
+def cancel_subscription(user: UserProtocol, sub: stripe.Subscription) -> stripe.Subscription:
+    return stripe.Subscription.delete(sub)
+
+
+@check_if_user_can_update(stripe.Subscription, action="modify")
+def modify_subscription(user: UserProtocol, sub: stripe.Subscription, **kwargs) -> stripe.Subscription:
+    return stripe.Subscription.modify(sub["id"], **kwargs)
 
 
 def _minimize_price(price: Dict[str, Any]) -> Dict[str, Any]:
@@ -238,18 +271,16 @@ def list_payment_methods(user: Optional[UserProtocol], types: List[PaymentMethod
             yield payment_method
 
 
-@customer_id_required
-def detach_payment_method(user: Optional[UserProtocol], payment_method_id: str) -> stripe.PaymentMethod:
-    payment_method = stripe.PaymentMethod.retrieve(payment_method_id)
-    if not payment_method['customer'] == user.stripe_customer_id:
-        raise StripeWrongCustomer(f"Customer {user.stripe_customer_id} does not own payment method {payment_method_id}")
+@check_if_user_can_update(stripe.PaymentMethod, action="detach")
+def detach_payment_method(user: Optional[UserProtocol], payment_method: stripe.PaymentMethod) -> stripe.PaymentMethod:
     return stripe.PaymentMethod.detach(payment_method)
 
 
-def detach_all_payment_methods(user: Optional[UserProtocol], types: List[PaymentMethodType], **kwargs) -> int:
-    i = 0
+def detach_all_payment_methods(user: Optional[UserProtocol], types: List[PaymentMethodType],
+                               **kwargs) -> List[stripe.PaymentMethod]:
     if user and user.stripe_customer_id:
-        for payment_method in list_payment_methods(user, types, **kwargs):
-            stripe.PaymentMethod.detach(payment_method)
-            i += 1
-    return i
+        futures = [executor.submit(stripe.PaymentMethod.detach,
+                                   payment_type)
+                   for payment_type in list_payment_methods(user, types, **kwargs)]
+        return [f.result() for f in futures]
+    return []
