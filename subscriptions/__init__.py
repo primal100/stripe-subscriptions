@@ -64,7 +64,9 @@ def create_subscription_checkout(user: UserProtocol, price_id: str, **kwargs) ->
 
 def create_setup_checkout(user: UserProtocol, subscription_id: str = None, **kwargs) -> stripe.checkout.Session:
     if subscription_id:
-        kwargs["metadata"] = {**kwargs.get('metadata', {}), **{'subscription_id': subscription_id}}
+        kwargs['setup_intent_data'] = kwargs.get('setup_intent_Data') or {}
+        kwargs['setup_intent_data']["metadata"] = {**kwargs['setup_intent_data'].get('metadata', {}),
+                                                   **{'subscription_id': subscription_id}}
     return create_checkout(user, "setup", **kwargs)
 
 

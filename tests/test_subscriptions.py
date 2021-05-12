@@ -37,6 +37,8 @@ def test_create_setup_checkout_session(user_with_customer_id, checkout_success_u
     assert checkout['setup_intent'] is not None
     assert checkout['success_url'] == checkout_success_url
     assert checkout['cancel_url'] == checkout_cancel_url
+    setup_intent = stripe.SetupIntent.retrieve(checkout['setup_intent'])
+    assert 'subscription_id' not in setup_intent['metadata'] == {}
 
 
 def test_create_setup_checkout_session_with_subscription(user_with_customer_id, checkout_success_url,
@@ -48,10 +50,11 @@ def test_create_setup_checkout_session_with_subscription(user_with_customer_id, 
                                                    cancel_url=checkout_cancel_url,
                                                    payment_method_types=payment_method_types)
     assert checkout['id'] is not None
-    assert checkout['metadata']["subscription_id"] == subscription["id"]
     assert checkout['setup_intent'] is not None
     assert checkout['success_url'] == checkout_success_url
     assert checkout['cancel_url'] == checkout_cancel_url
+    setup_intent = stripe.SetupIntent.retrieve(checkout['setup_intent'])
+    assert setup_intent['metadata']['subscription_id'] == subscription['id']
 
 
 def test_is_subscribed(user_with_customer_id, subscription, stripe_subscription_product_id):
