@@ -1,7 +1,7 @@
 import stripe
 from concurrent.futures import ThreadPoolExecutor
-from .decorators import customer_id_required, check_if_user_can_update
-from .exceptions import StripeCustomerIdRequired, DefaultPaymentMethodRequired
+from .decorators import customer_id_required
+from .exceptions import StripeCustomerIdRequired, DefaultPaymentMethodRequired, StripeWrongCustomer
 import itertools
 from . import tests
 from .types import UserProtocol, CacheProtocol, PaymentMethodType
@@ -27,6 +27,8 @@ class User(UserProtocol):
         self.stripe_customer_id = stripe_customer_id
 
 
+###Customer###
+
 def create_customer(user: UserProtocol, **kwargs) -> stripe.Customer:
     metadata = kwargs.pop('metadata', {})
     metadata ['id'] = user.id
@@ -42,6 +44,7 @@ def delete_customer(user: UserProtocol) -> Any:
     return response
 
 
+###Checkouts###
 @customer_id_required
 def create_checkout(user: UserProtocol, mode: str, line_items: List[Dict[str, Any]] = None,
                     **kwargs) -> stripe.checkout.Session:
@@ -70,6 +73,7 @@ def create_setup_checkout(user: UserProtocol, subscription_id: str = None, **kwa
     return create_checkout(user, "setup", **kwargs)
 
 
+###Get Subscription Data###
 def list_subscriptions(user: Optional[UserProtocol], **kwargs) -> List[stripe.Subscription]:
     if user and user.stripe_customer_id:
         subscriptions = stripe.Subscription.list(customer=user.stripe_customer_id, **kwargs)
@@ -77,12 +81,11 @@ def list_subscriptions(user: Optional[UserProtocol], **kwargs) -> List[stripe.Su
     return []
 
 
-def get_all_subscription_info(user: UserProtocol, **kwargs) -> List[stripe.Subscription]:
-    return list_subscriptions(user, status='all', **kwargs)
-
-
-def list_active_subscriptions(user: UserProtocol, **kwargs) -> List[stripe.Subscription]:
+def list_active_subscriptions(user: Optional[UserProtocol], **kwargs) -> List[stripe.Subscription]:
     return list_subscriptions(user, status='active', **kwargs)
+
+
+###Products & Prices###
 
 
 def _check_subscription_product_id(sub: stripe.Subscription) -> str:
@@ -97,27 +100,23 @@ def _check_subscription_cancel_at(sub: stripe.Subscription) -> Optional[int]:
     return sub.get('cancel_at', None)
 
 
-def list_products_subscribed_to(user: UserProtocol, **kwargs) -> List[Dict[str, Any]]:
+def list_products_prices_subscribed_to(user: UserProtocol, **kwargs) -> List[Dict[str, Any]]:
     subscriptions = list_active_subscriptions(user, **kwargs)
     return [{'product_id': _check_subscription_product_id(sub),
+             'price_id': _check_subscription_price_id(sub),
              'cancel_at': _check_subscription_cancel_at(sub)} for sub in subscriptions]
 
 
-def list_prices_subscribed_to(user: UserProtocol, **kwargs) -> List[Dict[str, Any]]:
-    subscriptions = list_active_subscriptions(user, limit=100, **kwargs)
-    return [{'price_id': _check_subscription_price_id(sub),
-             'cancel_at': _check_subscription_cancel_at(sub)} for sub in subscriptions]
-
-
-def is_subscribed_and_cancelled_time(user: UserProtocol, product_id: Optional[str] = None, **kwargs) -> Dict[str, Any]:
-    for sub in list_active_subscriptions(user, **kwargs):
-        if _check_subscription_product_id(sub) == product_id:
-            return {'subscribed': True, 'cancel_at': _check_subscription_cancel_at(sub)}
+def is_subscribed_and_cancelled_time(user: UserProtocol, product_id: Optional[str] = None,
+                                     price_id: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+    for sub in list_products_prices_subscribed_to(user, **kwargs):
+        if sub['product_id'] == product_id or sub['price_id'] == price_id:
+            return {'subscribed': True, 'cancel_at': sub['cancel_at']}
     return {'subscribed': False, 'cancel_at': None}
 
 
-def is_subscribed(user: UserProtocol, product_id: str = None) -> bool:
-    return is_subscribed_and_cancelled_time(user, product_id)['subscribed']
+def is_subscribed(user: UserProtocol, product_id: str = None, price_id: str = None) -> bool:
+    return is_subscribed_and_cancelled_time(user, product_id, price_id)['subscribed']
 
 
 def is_subscribed_with_cache(user: Optional[UserProtocol], cache: CacheProtocol,
@@ -135,65 +134,6 @@ def is_subscribed_with_cache(user: Optional[UserProtocol], cache: CacheProtocol,
     return subscribed
 
 
-@customer_id_required
-def update_default_payment_method_all_subscriptions(user: UserProtocol, default_payment_method: str) -> stripe.Customer:
-    customer_fut = executor.submit(stripe.Customer.modify, user.stripe_customer_id, invoice_settings={
-        'default_payment_method': default_payment_method})
-    subs = list_subscriptions(user)
-    fs = [executor.submit(stripe.Subscription.modify, sub["id"], default_payment_method=default_payment_method)
-          for sub in subs if sub['default_payment_method'] != default_payment_method]
-    [f.result() for f in fs]
-    return customer_fut.result()
-
-
-def _check_default_payment_method_kwargs(set_as_default_payment_method: bool,
-                                         default_payment_method: Optional[str] = None, **kwargs):
-    if set_as_default_payment_method and not default_payment_method:
-        raise DefaultPaymentMethodRequired
-    return set_as_default_payment_method
-
-
-@customer_id_required
-def create_subscription(user: UserProtocol, price_id: str,
-                        set_as_default_payment_method: bool = False, **kwargs) -> stripe.Subscription:
-    _check_default_payment_method_kwargs(set_as_default_payment_method, **kwargs)
-    sub = stripe.Subscription.create(
-        customer=user.stripe_customer_id,
-        items=[
-            {"price": price_id},
-        ],
-        **kwargs
-    )
-    if set_as_default_payment_method:
-        update_default_payment_method_all_subscriptions(user, **kwargs)
-    return sub
-
-
-def cancel_subscription_for_product(user: UserProtocol, product_id: str) -> bool:
-    sub_cancelled = False
-    for sub in list_subscriptions(user):
-        if _check_subscription_product_id(sub) == product_id:
-            sub_id = sub['id']
-            stripe.Subscription.delete(sub_id)
-            sub_cancelled = True
-    return sub_cancelled
-
-
-@check_if_user_can_update(stripe.Subscription, action="cancel")
-def cancel_subscription(user: UserProtocol, sub: stripe.Subscription) -> stripe.Subscription:
-    return stripe.Subscription.delete(sub)
-
-
-@check_if_user_can_update(stripe.Subscription, action="modify")
-def modify_subscription(user: UserProtocol, sub: stripe.Subscription,
-                        set_as_default_payment_method: bool = False, **kwargs) -> stripe.Subscription:
-    _check_default_payment_method_kwargs(set_as_default_payment_method, **kwargs)
-    sub = stripe.Subscription.modify(sub["id"], **kwargs)
-    if set_as_default_payment_method:
-        update_default_payment_method_all_subscriptions(user, **kwargs)
-    return sub
-
-
 def _minimize_price(price: Dict[str, Any]) -> Dict[str, Any]:
     keys = ['id', 'recurring', 'type', 'currency', 'unit_amount', 'unit_amount_decimal', 'nickname',
             'product', 'metadata']
@@ -207,7 +147,7 @@ def get_active_prices(**kwargs) -> List[Dict[str, Any]]:
 
 def get_subscription_prices(user: Optional[UserProtocol] = None, **kwargs) -> List[Dict[str, Any]]:
     price_future = executor.submit(get_active_prices, **kwargs)
-    subscribed_prices_future = executor.submit(list_prices_subscribed_to, user)
+    subscribed_prices_future = executor.submit(list_products_prices_subscribed_to, user)
     prices = price_future.result()
     subscribed_prices = subscribed_prices_future.result()
     for p in prices:
@@ -216,6 +156,14 @@ def get_subscription_prices(user: Optional[UserProtocol] = None, **kwargs) -> Li
             if s['price_id'] == p['id']:
                 p['subscription_info'] = {'subscribed': True, 'cancel_at': s['cancel_at']}
     return prices
+
+
+def retrieve_price(user: Optional[UserProtocol], price_id: str) -> Dict[str, Any]:
+    price_future = executor.submit(stripe.Price.retrieve, price_id)
+    subscription_info = is_subscribed_and_cancelled_time(user, price_id=price_id)
+    price = _minimize_price(price_future.result())
+    price["subscription_info"] = subscription_info
+    return price
 
 
 def _minimize_product(product: Dict[str, Any]) -> Dict[str, Any]:
@@ -249,6 +197,22 @@ def get_subscription_products_and_prices(user: Optional[UserProtocol] = None,
     return products
 
 
+def retrieve_product(user: Optional[UserProtocol], product_id: str,
+                     price_kwargs: Optional[Dict[str, Any]] = None,) -> Dict[str, Any]:
+    product_future = executor.submit(stripe.Product.retrieve, product_id)
+    price_kwargs = price_kwargs or {}
+    prices = get_subscription_prices(user, product=product_id, **price_kwargs)
+    product = _minimize_product(product_future.result())
+    product['prices'] = prices
+    product['subscription_info'] = {'subscribed': False, 'cancel_at': None}
+    for price in prices:
+        del price['product']
+        if price['subscription_info']['subscribed']:
+            product['subscription_info'] = price['subscription_info']
+    return product
+
+
+### Setup Intents ###
 @customer_id_required
 def create_setup_intent(user, payment_method_types: List[PaymentMethodType] = None, **kwargs) -> stripe.SetupIntent:
     setup_intent_kwargs = {
@@ -260,6 +224,7 @@ def create_setup_intent(user, payment_method_types: List[PaymentMethodType] = No
     return stripe.SetupIntent.create(**setup_intent_kwargs)
 
 
+### Payment Methods ###
 def list_payment_methods(user: Optional[UserProtocol], types: List[PaymentMethodType],
                          **kwargs) -> Generator[stripe.PaymentMethod, None, None]:
     """
@@ -280,11 +245,56 @@ def list_payment_methods(user: Optional[UserProtocol], types: List[PaymentMethod
             yield payment_method
 
 
-@check_if_user_can_update(stripe.PaymentMethod, action="detach")
-def detach_payment_method(user: Optional[UserProtocol], payment_method: stripe.PaymentMethod) -> stripe.PaymentMethod:
-    return stripe.PaymentMethod.detach(payment_method)
+###Subscriptions
+def _check_default_payment_method_kwargs(set_as_default_payment_method: bool,
+                                         default_payment_method: Optional[str] = None, **kwargs):
+    if set_as_default_payment_method and not default_payment_method:
+        raise DefaultPaymentMethodRequired
+    return set_as_default_payment_method
 
 
+@customer_id_required
+def create_subscription(user: UserProtocol, price_id: str,
+                        set_as_default_payment_method: bool = False, **kwargs) -> stripe.Subscription:
+    _check_default_payment_method_kwargs(set_as_default_payment_method, **kwargs)
+    sub = stripe.Subscription.create(
+        customer=user.stripe_customer_id,
+        items=[
+            {"price": price_id},
+        ],
+        **kwargs
+    )
+    if set_as_default_payment_method:
+        update_default_payment_method_all_subscriptions(user, **kwargs)
+    return sub
+
+
+###Generic Methods For Existing Objects###
+@customer_id_required
+def allow_if_owned_by_user(user: Optional[UserProtocol], obj_class,  obj_id: str, action: str):
+    obj = obj_class.retrieve(obj_id)
+    if not user or obj['customer'] != user.stripe_customer_id:
+        msg = f"Customer {user.stripe_customer_id} cannot {action} {obj['object']} {obj_id} as they do not own it."
+        raise StripeWrongCustomer(msg)
+    return obj
+
+
+def retrieve(user: UserProtocol, obj_cls: Any, obj_id: str, action="retrieve") -> Dict[str, Any]:
+    obj = allow_if_owned_by_user(user, obj_cls, obj_id, action)
+    return obj
+
+
+def delete(user: UserProtocol, obj_cls: Any, obj_id: str, action="delete") -> Any:
+    obj = retrieve(user, obj_cls, obj_id, action=action)
+    return obj_cls.delete(obj)
+
+
+def modify(user: UserProtocol, obj_cls: Any, obj_id: str, action="modify", **kwargs) -> Any:
+    obj = retrieve(user, obj_cls, obj_id, action=action)
+    return obj_cls.modify(obj["id"], **kwargs)
+
+
+###Change Existing Payment Methods###
 def detach_all_payment_methods(user: Optional[UserProtocol], types: List[PaymentMethodType],
                                **kwargs) -> List[stripe.PaymentMethod]:
     if user and user.stripe_customer_id:
@@ -293,3 +303,43 @@ def detach_all_payment_methods(user: Optional[UserProtocol], types: List[Payment
                    for payment_type in list_payment_methods(user, types, **kwargs)]
         return [f.result() for f in futures]
     return []
+
+
+def detach_payment_method(user: Optional[UserProtocol], payment_method_id: str) -> stripe.PaymentMethod:
+    obj = retrieve(user, stripe.PaymentMethod, payment_method_id, action="detach")
+    return stripe.PaymentMethod.detach(obj["id"])
+
+
+###Change Existing Subscriptions###
+def cancel_subscription(user: UserProtocol, subscription_id: str) -> stripe.Subscription:
+    return delete(user, stripe.Subscription, subscription_id)
+
+
+def cancel_subscription_for_product(user: UserProtocol, product_id: str) -> bool:
+    sub_cancelled = False
+    for sub in list_subscriptions(user):
+        if _check_subscription_product_id(sub) == product_id:
+            sub_id = sub['id']
+            stripe.Subscription.delete(sub_id)
+            sub_cancelled = True
+    return sub_cancelled
+
+
+@customer_id_required
+def update_default_payment_method_all_subscriptions(user: UserProtocol, default_payment_method: str) -> stripe.Customer:
+    customer_fut = executor.submit(stripe.Customer.modify, user.stripe_customer_id, invoice_settings={
+        'default_payment_method': default_payment_method})
+    subs = list_subscriptions(user)
+    fs = [executor.submit(stripe.Subscription.modify, sub["id"], default_payment_method=default_payment_method)
+          for sub in subs if sub['default_payment_method'] != default_payment_method]
+    [f.result() for f in fs]
+    return customer_fut.result()
+
+
+def modify_subscription(user: UserProtocol, subscription_id: str,
+                        set_as_default_payment_method: bool = False, **kwargs) -> stripe.Subscription:
+    _check_default_payment_method_kwargs(set_as_default_payment_method, **kwargs)
+    sub = modify(user, stripe.Subscription, subscription_id, **kwargs)
+    if set_as_default_payment_method:
+        update_default_payment_method_all_subscriptions(user, **kwargs)
+    return sub
