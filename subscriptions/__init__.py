@@ -185,8 +185,13 @@ def cancel_subscription(user: UserProtocol, sub: stripe.Subscription) -> stripe.
 
 
 @check_if_user_can_update(stripe.Subscription, action="modify")
-def modify_subscription(user: UserProtocol, sub: stripe.Subscription, **kwargs) -> stripe.Subscription:
-    return stripe.Subscription.modify(sub["id"], **kwargs)
+def modify_subscription(user: UserProtocol, sub: stripe.Subscription,
+                        set_as_default_payment_method: bool = False, **kwargs) -> stripe.Subscription:
+    _check_default_payment_method_kwargs(set_as_default_payment_method, **kwargs)
+    sub = stripe.Subscription.modify(sub["id"], **kwargs)
+    if set_as_default_payment_method:
+        update_default_payment_method_all_subscriptions(user, **kwargs)
+    return sub
 
 
 def _minimize_price(price: Dict[str, Any]) -> Dict[str, Any]:

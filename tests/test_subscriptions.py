@@ -307,6 +307,24 @@ def test_modify_subscription_payment_method(user_with_customer_id, subscription,
     assert sub['default_payment_method'] == payment_method_saved["id"]
 
 
+def test_modify_subscription_set_default_payment_method(user_with_customer_id,
+                                                        payment_method_saved,
+                                                        default_payment_method_for_customer,
+                                                        subscription,
+                                                        stripe_price_id,
+                                                        stripe_subscription_product_id):
+    assert subscription['default_payment_method'] is None
+    subscriptions.modify_subscription(user_with_customer_id, subscription['id'], set_as_default_payment_method=True,
+                                      default_payment_method=payment_method_saved["id"])
+    sub = stripe.Subscription.retrieve(subscription['id'])
+    assert sub['default_payment_method'] == payment_method_saved["id"]
+    customer = stripe.Customer.retrieve(user_with_customer_id.stripe_customer_id)
+    assert customer['invoice_settings']['default_payment_method'] == payment_method_saved['id']
+    response = subscriptions.is_subscribed_and_cancelled_time(user_with_customer_id, stripe_subscription_product_id)
+    assert response['subscribed'] is True
+    assert response['cancel_at'] is None
+
+
 def test_modify_subscription_wrong_owner(subscription, wrong_customer_id):
     with pytest.raises(subscriptions.exceptions.StripeWrongCustomer):
         subscriptions.modify_subscription(wrong_customer_id, subscription['id'])
