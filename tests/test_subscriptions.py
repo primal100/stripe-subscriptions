@@ -10,7 +10,6 @@ def test_create_customer_user(user):
     assert user.stripe_customer_id
 
 
-
 def test_create_subscription_checkout_session(user_with_customer_id, stripe_price_id, checkout_success_url,
                                               checkout_cancel_url, payment_method_types):
     checkout = subscriptions.create_subscription_checkout(user_with_customer_id, stripe_price_id,
