@@ -1,7 +1,15 @@
 from setuptools import setup
+from pkg_resources import parse_requirements
 
 
 readme = open('README.md', 'r').read()
+
+
+def get_requirements(filename: str) -> List[str]:
+    with open(filename, 'rt') as f:
+        text = f.read()
+    requirements = [str(requirement) for requirement in parse_requirements(text)]
+    return requirements
 
 
 # https://stackoverflow.com/questions/2058802/how-can-i-get-the-version-defined-in-setup-py-setuptools-in-my-package
@@ -10,24 +18,7 @@ with open('subscriptions/__version__.py') as f:
     exec(f.read(), main_ns)
 
 setup(
-    name='stripe-subscriptions',
     version=main_ns['version'],
-    packages=['subscriptions'],
-    url='https://github.com/primal100/stripe-subscriptions',
-    license="MIT License",
-    author='Paul Martin',
-    description='Easier management of subscriptions with Stripe',
     long_description=readme,
-    classifiers=[
-        'Development Status :: 5 - Production/Stable',
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
-        'License :: OSI Approved :: MIT License',
-        'Operating System :: OS Independent',
-    ],
-    python_requires='>=3.6',
-    setup_requires=['wheel'],
-    install_requires=["stripe"],
+    install_requires=required,
 )

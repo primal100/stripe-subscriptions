@@ -10,6 +10,7 @@ def test_create_customer_user(user):
     assert user.stripe_customer_id
 
 
+
 def test_create_subscription_checkout_session(user_with_customer_id, stripe_price_id, checkout_success_url,
                                               checkout_cancel_url, payment_method_types):
     checkout = subscriptions.create_subscription_checkout(user_with_customer_id, stripe_price_id,
@@ -74,7 +75,7 @@ def test_is_not_subscribed(no_user_and_user_with_and_without_customer_id, stripe
 
 
 def test_is_subscribed_with_cache(user_with_customer_id, subscription, stripe_subscription_product_id, cache):
-    cache_key = f'is_subscribed_{stripe_subscription_product_id}_{user_with_customer_id.id}'
+    cache_key = f'is_subscribed_{user_with_customer_id.id}_{stripe_subscription_product_id}'
     assert cache.get(cache_key) is None
     subscribed = subscriptions.is_subscribed_with_cache(user_with_customer_id, cache, stripe_subscription_product_id)
     assert subscribed is True
@@ -87,11 +88,11 @@ def test_no_user_is_not_subscribed_with_cache(none_or_user, cache, stripe_subscr
     subscribed = subscriptions.is_subscribed_with_cache(none_or_user, cache,
                                                         product_id=stripe_subscription_product_id)
     assert subscribed is False
-    assert cache._data == {}
+    assert cache.data == {}
 
 
 def test_is_not_subscribed_with_cache(user_with_customer_id, stripe_subscription_product_id, cache):
-    cache_key = f'is_subscribed_{user_with_customer_id.id}'
+    cache_key = f'is_subscribed_{user_with_customer_id.id}_{stripe_subscription_product_id}'
     assert cache.get(cache_key) is None
     subscribed = subscriptions.is_subscribed_with_cache(user_with_customer_id, cache,
                                                         product_id=stripe_subscription_product_id)
@@ -103,12 +104,13 @@ def test_is_not_subscribed_with_cache(user_with_customer_id, stripe_subscription
 
 
 def test_list_active_subscriptions_subscribed_user(user_with_customer_id,
-                                                   subscription,
+                                                   subscription_current_period_end,
                                                    stripe_subscription_product_id,
                                                    stripe_price_id):
     subscribed_to = subscriptions.list_products_prices_subscribed_to(user_with_customer_id)
     assert subscribed_to == [
-        {'product_id': stripe_subscription_product_id, 'price_id': stripe_price_id, 'cancel_at': None}]
+        {'product_id': stripe_subscription_product_id, 'price_id': stripe_price_id, 'cancel_at': None,
+         'current_period_end': subscription_current_period_end}]
 
 
 def test_list_active_subscriptions_user_with_customer_id(no_user_and_user_with_and_without_customer_id):
