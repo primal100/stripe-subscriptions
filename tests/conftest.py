@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import subscriptions
 from subscriptions import UserProtocol, CacheProtocol, User
 
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict
 
 api_key = ''
 python_version = sys.version_info
@@ -220,6 +220,10 @@ class Cache(CacheProtocol):
     def __init__(self):
         self._data = {}
 
+    @property
+    def data(self) -> Dict[str, Any]:
+        return self._data
+
     def get(self, key: str) -> Optional[Any]:
         result = self._data.get(key)
         if result:
@@ -228,8 +232,8 @@ class Cache(CacheProtocol):
             del self._data[key]
         return None
 
-    def set(self, key: str, value: Any) -> None:
-        self._data[key] = {'value': value, 'expires': datetime.now() + timedelta(seconds=self.expire_after)}
+    def set(self, key: str, value: Any, timeout: int = None) -> None:
+        self._data[key] = {'value': value, 'expires': datetime.now() + timedelta(seconds=timeout or self.expire_after)}
 
 
 @pytest.fixture
@@ -238,7 +242,12 @@ def cache() -> CacheProtocol:
 
 
 @pytest.fixture
-def expected_subscription_prices(stripe_subscription_product_id, stripe_price_id, stripe_price_currency) -> List:
+def subscription_current_period_end(subscription):
+    return subscription['current_period_end']
+
+
+@pytest.fixture
+def expected_subscription_prices(stripe_subscription_product_id, stripe_price_id, stripe_price_currency, subscription_current_period_end) -> List:
     return [
         {'id': stripe_price_id,
          'recurring': {
@@ -255,7 +264,7 @@ def expected_subscription_prices(stripe_subscription_product_id, stripe_price_id
          'nickname': None,
          'metadata': {},
          'product': stripe_subscription_product_id,
-         'subscription_info': {'subscribed': True, 'cancel_at': None}}]
+         'subscription_info': {'subscribed': True, 'cancel_at': None, 'current_period_end': subscription_current_period_end}}]
 
 
 
@@ -278,7 +287,7 @@ def expected_subscription_prices_unsubscribed(stripe_subscription_product_id, st
          'nickname': None,
          'metadata': {},
          'product': stripe_subscription_product_id,
-         'subscription_info': {'subscribed': False, 'cancel_at': None}}]
+         'subscription_info': {'subscribed': False, 'cancel_at': None, 'current_period_end': None}}]
 
 
 @pytest.fixture
@@ -287,7 +296,7 @@ def expected_subscription_products_and_prices(stripe_subscription_product_id, st
                                               unsubscribed_product_name, stripe_unsubscribed_price_id,
                                               stripe_subscription_product_url,
                                               stripe_unsubscribed_product_url,
-                                              stripe_price_currency) -> List:
+                                              stripe_price_currency, subscription_current_period_end) -> List:
     return [
         {'id': stripe_unsubscribed_product_id,
          'images': [],
@@ -302,12 +311,12 @@ def expected_subscription_products_and_prices(stripe_subscription_product_id, st
                                 'interval_count': 1,
                                 'trial_period_days': None,
                                 'usage_type': 'licensed'},
-                  'subscription_info': {'cancel_at': None, 'subscribed': False},
+                  'subscription_info': {'cancel_at': None, 'current_period_end': None, 'subscribed': False},
                   'type': 'recurring',
                   'unit_amount': 9999,
                   'unit_amount_decimal': '9999'}],
          'shippable': None,
-         'subscription_info': {'cancel_at': None, 'subscribed': False},
+         'subscription_info': {'cancel_at': None, 'current_period_end': None, 'subscribed': False},
          'type': 'service',
          'unit_label': None,
          'url': stripe_unsubscribed_product_url},
@@ -333,8 +342,8 @@ def expected_subscription_products_and_prices(stripe_subscription_product_id, st
                      'unit_amount_decimal': '129',
                      'nickname': None,
                      'metadata': {},
-                     'subscription_info': {'subscribed': True, 'cancel_at': None}}],
-         'subscription_info': {'subscribed': True, 'cancel_at': None}}
+                     'subscription_info': {'subscribed': True, 'current_period_end': subscription_current_period_end, 'cancel_at': None}}],
+         'subscription_info': {'subscribed': True, 'current_period_end': subscription_current_period_end, 'cancel_at': None}}
     ]
 
 
@@ -359,12 +368,12 @@ def expected_subscription_products_and_prices_unsubscribed(stripe_subscription_p
                                 'interval_count': 1,
                                 'trial_period_days': None,
                                 'usage_type': 'licensed'},
-                  'subscription_info': {'cancel_at': None, 'subscribed': False},
+                  'subscription_info': {'cancel_at': None, 'current_period_end': None, 'subscribed': False},
                   'type': 'recurring',
                   'unit_amount': 9999,
                   'unit_amount_decimal': '9999'}],
          'shippable': None,
-         'subscription_info': {'cancel_at': None, 'subscribed': False},
+         'subscription_info': {'cancel_at': None, 'current_period_end': None, 'subscribed': False},
          'type': 'service',
          'unit_label': None,
          'url': stripe_unsubscribed_product_url},
@@ -390,6 +399,6 @@ def expected_subscription_products_and_prices_unsubscribed(stripe_subscription_p
                      'unit_amount_decimal': '129',
                      'nickname': None,
                      'metadata': {},
-                     'subscription_info': {'subscribed': False, 'cancel_at': None}}],
-         'subscription_info': {'subscribed': False, 'cancel_at': None}}
+                     'subscription_info': {'subscribed': False, 'current_period_end': None,'cancel_at': None}}],
+         'subscription_info': {'subscribed': False, 'current_period_end': None,'cancel_at': None}}
     ]
