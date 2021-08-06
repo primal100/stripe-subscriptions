@@ -213,7 +213,7 @@ def retrieve_product(user: Optional[UserProtocol], product_id: str,
     prices = get_subscription_prices(user, product=product_id, **price_kwargs)
     product: ProductDetail = _minimize_product(product_future.result())
     product['prices'] = prices
-    product['subscription_info'] = {'subscribed': False, 'cancel_at': None}
+    product['subscription_info'] = {'subscribed': False, 'current_period_end': None, 'cancel_at': None}
     price: PriceNoProductSubscriptionInfo
     for price in prices:
         price.pop('product')
