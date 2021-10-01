@@ -7,7 +7,7 @@ from stripe.error import InvalidRequestError
 from datetime import datetime, timedelta
 
 import subscriptions
-from subscriptions import UserProtocol, CacheProtocol, User
+from subscriptions import UserProtocol, User
 
 from typing import Optional, Any, List, Dict
 
@@ -212,33 +212,6 @@ def stripe_unsubscribed_price_id(stripe_unsubscribed_product_id) -> str:
             product=stripe_unsubscribed_product_id,
         )
     return price['id']
-
-
-class Cache(CacheProtocol):
-    expire_after = 60
-
-    def __init__(self):
-        self._data = {}
-
-    @property
-    def data(self) -> Dict[str, Any]:
-        return self._data
-
-    def get(self, key: str) -> Optional[Any]:
-        result = self._data.get(key)
-        if result:
-            if result['expires'] > datetime.now():
-                return result['value']
-            del self._data[key]
-        return None
-
-    def set(self, key: str, value: Any, timeout: int = None) -> None:
-        self._data[key] = {'value': value, 'expires': datetime.now() + timedelta(seconds=timeout or self.expire_after)}
-
-
-@pytest.fixture
-def cache() -> CacheProtocol:
-    return Cache()
 
 
 @pytest.fixture

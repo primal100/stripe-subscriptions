@@ -5,7 +5,7 @@ from .exceptions import StripeCustomerIdRequired, DefaultPaymentMethodRequired, 
 import itertools
 from . import tests
 from .types import (
-    UserProtocol, CacheProtocol, PaymentMethodType, ProductSubscription, ProductIsSubscribed, Price, PriceSubscription,
+    UserProtocol, PaymentMethodType, ProductSubscription, ProductIsSubscribed, Price, PriceSubscription,
     ProductPriceSubscription, Product, ProductDetail, PriceNoProductSubscriptionInfo
 )
 from .__version__ import version
@@ -118,21 +118,6 @@ def is_subscribed_and_cancelled_time(user: UserProtocol, product_id: Optional[st
 
 def is_subscribed(user: UserProtocol, product_id: str = None, price_id: str = None) -> bool:
     return is_subscribed_and_cancelled_time(user, product_id, price_id)['subscribed']
-
-
-def is_subscribed_with_cache(user: Optional[UserProtocol], cache: CacheProtocol,
-                             product_id: Optional[str] = None, timeout: int = 3600) -> bool:
-    """ Need to keep under 250 characters for memcached"""
-    if not user or not user.stripe_customer_id:
-        return False
-    sanitized_userid = str(user.id)[-80:]
-    cache_key = f'is_subscribed_{sanitized_userid}_{product_id}'
-    subscribed = cache.get(cache_key)
-    if subscribed is None:
-        subscribed = is_subscribed(user, product_id)
-        if subscribed:
-            cache.set(cache_key, subscribed, timeout=timeout)
-    return subscribed
 
 
 def _minimize_price(price: Dict[str, Any]) -> Price:
