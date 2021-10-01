@@ -73,35 +73,6 @@ def test_is_not_subscribed(no_user_and_user_with_and_without_customer_id, stripe
                                        stripe_subscription_product_id) is False
 
 
-def test_is_subscribed_with_cache(user_with_customer_id, subscription, stripe_subscription_product_id, cache):
-    cache_key = f'is_subscribed_{user_with_customer_id.id}_{stripe_subscription_product_id}'
-    assert cache.get(cache_key) is None
-    subscribed = subscriptions.is_subscribed_with_cache(user_with_customer_id, cache, stripe_subscription_product_id)
-    assert subscribed is True
-    assert cache.get(cache_key) is True
-    subscribed = subscriptions.is_subscribed_with_cache(user_with_customer_id, cache, stripe_subscription_product_id)
-    assert subscribed is True
-
-
-def test_no_user_is_not_subscribed_with_cache(none_or_user, cache, stripe_subscription_product_id):
-    subscribed = subscriptions.is_subscribed_with_cache(none_or_user, cache,
-                                                        product_id=stripe_subscription_product_id)
-    assert subscribed is False
-    assert cache.data == {}
-
-
-def test_is_not_subscribed_with_cache(user_with_customer_id, stripe_subscription_product_id, cache):
-    cache_key = f'is_subscribed_{user_with_customer_id.id}_{stripe_subscription_product_id}'
-    assert cache.get(cache_key) is None
-    subscribed = subscriptions.is_subscribed_with_cache(user_with_customer_id, cache,
-                                                        product_id=stripe_subscription_product_id)
-    assert subscribed is False
-    assert cache.get(cache_key) is None
-    subscribed = subscriptions.is_subscribed_with_cache(user_with_customer_id, cache,
-                                                        product_id=stripe_subscription_product_id)
-    assert subscribed is False
-
-
 def test_list_active_subscriptions_subscribed_user(user_with_customer_id,
                                                    subscription_current_period_end,
                                                    stripe_subscription_product_id,

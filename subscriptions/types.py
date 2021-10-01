@@ -39,18 +39,6 @@ class UserProtocol(Protocol):
     stripe_customer_id: Optional[str]
 
 
-class CacheProtocol(Protocol):
-    @property
-    def data(self) -> Dict[str, Any]:
-        return {}
-
-    def set(self, key: str, value: Any, timeout: int = None) -> Any:
-        pass
-
-    def get(self, key: str) -> Any:
-        pass
-
-
 class ProductSubscription(TypedDict):
     product_id: str
     price_id: str
