@@ -40,6 +40,7 @@ class UserProtocol(Protocol):
 
 
 class ProductSubscription(TypedDict):
+    sub_id: str
     product_id: str
     price_id: str
     cancel_at: int
@@ -47,7 +48,7 @@ class ProductSubscription(TypedDict):
 
 
 class ProductIsSubscribed(TypedDict):
-    subscribed: bool
+    sub_id: Optional[str]
     product_id: Optional[str]
     price_id: Optional[str]
     cancel_at: Optional[int]
@@ -55,7 +56,7 @@ class ProductIsSubscribed(TypedDict):
 
 
 class SubscriptionInfo(TypedDict):
-    subscribed: bool
+    sub_id: Optional[str]
     cancel_at: Optional[int]
     current_period_end: Optional[int]
 

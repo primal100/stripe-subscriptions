@@ -99,7 +99,8 @@ def _check_subscription_price_id(sub: stripe.Subscription) -> str:
 
 def list_products_prices_subscribed_to(user: UserProtocol, **kwargs) -> List[ProductSubscription]:
     subscriptions = list_active_subscriptions(user, **kwargs)
-    return [{'product_id': _check_subscription_product_id(sub),
+    return [{'sub_id': sub['id'],
+             'product_id': _check_subscription_product_id(sub),
              'price_id': _check_subscription_price_id(sub),
              'cancel_at': sub.get('cancel_at', None),
              'current_period_end': sub.get('current_period_end', None)
@@ -111,13 +112,12 @@ def is_subscribed_and_cancelled_time(user: UserProtocol, product_id: Optional[st
     sub: ProductIsSubscribed
     for sub in list_products_prices_subscribed_to(user, **kwargs):
         if sub['product_id'] == product_id or sub['price_id'] == price_id:
-            sub['subscribed'] = True
             return sub
-    return {'subscribed': False, 'cancel_at': None, 'current_period_end': None, 'product_id': None, 'price_id': None}
+    return {'sub_id': None, 'cancel_at': None, 'current_period_end': None, 'product_id': None, 'price_id': None}
 
 
 def is_subscribed(user: UserProtocol, product_id: str = None, price_id: str = None) -> bool:
-    return is_subscribed_and_cancelled_time(user, product_id, price_id)['subscribed']
+    return bool(is_subscribed_and_cancelled_time(user, product_id, price_id)['sub_id'])
 
 
 def _minimize_price(price: Dict[str, Any]) -> Price:
@@ -138,10 +138,10 @@ def get_subscription_prices(user: Optional[UserProtocol] = None, **kwargs) -> Li
     subscribed_prices = subscribed_prices_future.result()
     p: PriceSubscription
     for p in prices:
-        p['subscription_info'] = {'subscribed': False, 'current_period_end': None, 'cancel_at': None}
+        p['subscription_info'] = {'sub_id': None, 'current_period_end': None, 'cancel_at': None}
         for s in subscribed_prices:
             if s['price_id'] == p['id']:
-                p['subscription_info'] = {'subscribed': True, 'cancel_at': s['cancel_at'],
+                p['subscription_info'] = {'sub_id': s['sub_id'], 'cancel_at': s['cancel_at'],
                                           'current_period_end': s['current_period_end']}
     return prices
 
@@ -151,7 +151,7 @@ def retrieve_price(user: Optional[UserProtocol], price_id: str) -> PriceSubscrip
     subscription_info = is_subscribed_and_cancelled_time(user, price_id=price_id)
     price = _minimize_price(price_future.result())
     price["subscription_info"] = {
-        'subscribed': subscription_info['subscribed'],
+        'sub_id': subscription_info['sub_id'],
         'current_period_end': subscription_info['current_period_end'],
         'cancel_at': subscription_info['cancel_at']
     }
@@ -178,7 +178,7 @@ def get_subscription_products_and_prices(user: Optional[UserProtocol] = None,
     products = products_future.result()
     for product in products:
         product['prices'] = []
-        product['subscription_info'] = {'subscribed': False, 'current_period_end': None, 'cancel_at': None}
+        product['subscription_info'] = {'sub_id': None, 'current_period_end': None, 'cancel_at': None}
     price: PriceNoProductSubscriptionInfo
     for price in prices:
         product_id = price.pop('product', None)
@@ -186,7 +186,7 @@ def get_subscription_products_and_prices(user: Optional[UserProtocol] = None,
             for product in products:
                 if product_id == product['id']:
                     product['prices'].append(price)
-                    if price['subscription_info']['subscribed']:
+                    if price['subscription_info']['sub_id']:
                         product['subscription_info'] = price['subscription_info']
     return products
 
@@ -198,11 +198,11 @@ def retrieve_product(user: Optional[UserProtocol], product_id: str,
     prices = get_subscription_prices(user, product=product_id, **price_kwargs)
     product: ProductDetail = _minimize_product(product_future.result())
     product['prices'] = prices
-    product['subscription_info'] = {'subscribed': False, 'current_period_end': None, 'cancel_at': None}
+    product['subscription_info'] = {'sub_id': None, 'current_period_end': None, 'cancel_at': None}
     price: PriceNoProductSubscriptionInfo
     for price in prices:
         price.pop('product')
-        if price['subscription_info']['subscribed']:
+        if price['subscription_info']['sub_id']:
             product['subscription_info'] = price['subscription_info']
     return product
 
