@@ -32,6 +32,10 @@ class User(UserProtocol):
 # Customer
 
 def create_customer(user: UserProtocol, **kwargs) -> stripe.Customer:
+    """
+    Creates a new customer over the stripe API using the user data. The customer id is set on the user object but not saved.
+    The customer id must be saved to the database after this function is called. e.g. by calling user.save().
+    """
     metadata = kwargs.pop('metadata', {})
     metadata['id'] = user.id
     customer = stripe.Customer.create(email=user.email, name=str(user), metadata=metadata, **kwargs)
@@ -40,7 +44,12 @@ def create_customer(user: UserProtocol, **kwargs) -> stripe.Customer:
 
 
 @customer_id_required
-def delete_customer(user: UserProtocol) -> Any:
+def delete_customer(user: UserProtocol) -> stripe.Customer:
+    """
+    Deletes a customer from Stripe. Sets the customer id on the user object to none but this is not saved.
+    The customer id must be saved to the database after this function is called, e.g. by calling user.save().
+    An exception will be raised if the user does already not have a customer id set.
+    """
     response = stripe.Customer.delete(user.stripe_customer_id)
     user.stripe_customer_id = None
     return response
@@ -50,6 +59,11 @@ def delete_customer(user: UserProtocol) -> Any:
 @customer_id_required
 def create_checkout(user: UserProtocol, mode: str, line_items: List[Dict[str, Any]] = None,
                     **kwargs) -> stripe.checkout.Session:
+    """
+    Creates a new Stripe checkout session for this user.
+    Recommended to call create_subscription_checkout or create_setup_checkout instead.
+    An exception will be raised if the user does already not have a customer id set.
+    """
     return stripe.checkout.Session.create(
         customer=user.stripe_customer_id,
         mode=mode,
@@ -59,6 +73,10 @@ def create_checkout(user: UserProtocol, mode: str, line_items: List[Dict[str, An
 
 
 def create_subscription_checkout(user: UserProtocol, price_id: str, **kwargs) -> stripe.checkout.Session:
+    """
+    Creates a new Stripe subscription checkout session for this user for the given price.
+    An exception will be raised if the user does already not have a customer id set.
+    """
     return create_checkout(user, "subscription", [
             {
                 'price': price_id,
@@ -68,6 +86,10 @@ def create_subscription_checkout(user: UserProtocol, price_id: str, **kwargs) ->
 
 
 def create_setup_checkout(user: UserProtocol, subscription_id: str = None, **kwargs) -> stripe.checkout.Session:
+    """
+    Creates a new Stripe setup checkout session for this user, allowing them to add a new payment method for future use.
+    An exception will be raised if the user does already not have a customer id set.
+    """
     if subscription_id:
         kwargs['setup_intent_data'] = kwargs.get('setup_intent_Data') or {}
         kwargs['setup_intent_data']["metadata"] = {**kwargs['setup_intent_data'].get('metadata', {}),
@@ -75,8 +97,11 @@ def create_setup_checkout(user: UserProtocol, subscription_id: str = None, **kwa
     return create_checkout(user, "setup", **kwargs)
 
 
-###Get Subscription Data###
+# Get Subscription Data
 def list_subscriptions(user: Optional[UserProtocol], **kwargs) -> List[stripe.Subscription]:
+    """
+    List all subscriptions for a user. Filters can be applied with kwargs according to the Stripe API.
+    """
     if user and user.stripe_customer_id:
         subscriptions = stripe.Subscription.list(customer=user.stripe_customer_id, **kwargs)
         return subscriptions['data']
@@ -84,10 +109,13 @@ def list_subscriptions(user: Optional[UserProtocol], **kwargs) -> List[stripe.Su
 
 
 def list_active_subscriptions(user: Optional[UserProtocol], **kwargs) -> List[stripe.Subscription]:
+    """
+    List all active subscriptions for a user.
+    """
     return list_subscriptions(user, status='active', **kwargs)
 
 
-###Products & Prices###
+# Products & Prices
 
 def _check_subscription_product_id(sub: stripe.Subscription) -> str:
     return sub.get('plan', {}).get('product', None)
@@ -98,6 +126,9 @@ def _check_subscription_price_id(sub: stripe.Subscription) -> str:
 
 
 def list_products_prices_subscribed_to(user: UserProtocol, **kwargs) -> List[ProductSubscription]:
+    """
+    Flat data for each active subscription to quickly check which products a user is subscribed to.
+    """
     subscriptions = list_active_subscriptions(user, **kwargs)
     return [{'sub_id': sub['id'],
              'product_id': _check_subscription_product_id(sub),
@@ -109,6 +140,9 @@ def list_products_prices_subscribed_to(user: UserProtocol, **kwargs) -> List[Pro
 
 def is_subscribed_and_cancelled_time(user: UserProtocol, product_id: Optional[str] = None,
                                      price_id: Optional[str] = None, **kwargs) -> ProductIsSubscribed:
+    """
+    Return first active subscription for a specific product or price or none to quickly check if a user is subscribed.
+    """
     sub: ProductIsSubscribed
     for sub in list_products_prices_subscribed_to(user, **kwargs):
         if sub['product_id'] == product_id or sub['price_id'] == price_id:
@@ -117,6 +151,9 @@ def is_subscribed_and_cancelled_time(user: UserProtocol, product_id: Optional[st
 
 
 def is_subscribed(user: UserProtocol, product_id: str = None, price_id: str = None) -> bool:
+    """
+    Returns a simple true or false to check if a user subscribed to the given product or price.
+    """
     return bool(is_subscribed_and_cancelled_time(user, product_id, price_id)['sub_id'])
 
 
@@ -127,11 +164,17 @@ def _minimize_price(price: Dict[str, Any]) -> Price:
 
 
 def get_active_prices(**kwargs) -> List[Price]:
+    """
+    List all active prices
+    """
     response = stripe.Price.list(active=True, **kwargs)
     return [_minimize_price(p) for p in response['data']]
 
 
 def get_subscription_prices(user: Optional[UserProtocol] = None, **kwargs) -> List[PriceSubscription]:
+    """
+    Makes multiple requests to Stripe API to return the list of active prices with subscription data for each one for the given user.
+    """
     price_future = executor.submit(get_active_prices, **kwargs)
     subscribed_prices_future = executor.submit(list_products_prices_subscribed_to, user)
     prices = price_future.result()
@@ -147,6 +190,9 @@ def get_subscription_prices(user: Optional[UserProtocol] = None, **kwargs) -> Li
 
 
 def retrieve_price(user: Optional[UserProtocol], price_id: str) -> PriceSubscription:
+    """
+    Retrieve a single price with subscription info
+    """
     price_future = executor.submit(stripe.Price.retrieve, price_id)
     subscription_info = is_subscribed_and_cancelled_time(user, price_id=price_id)
     price = _minimize_price(price_future.result())

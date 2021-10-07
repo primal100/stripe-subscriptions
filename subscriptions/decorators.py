@@ -1,9 +1,13 @@
 from functools import wraps
 from .exceptions import StripeCustomerIdRequired
+from typing import Callable
 from .types import UserProtocol
 
 
-def customer_id_required(f):
+def customer_id_required(f: Callable):
+    """
+    Decorator to check if
+    """
     @wraps(f)
     def wrapper(user: UserProtocol, *args, **kwargs):
         if user and user.stripe_customer_id:
