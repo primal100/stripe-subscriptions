@@ -1,5 +1,4 @@
-Stripe-Subscriptions
---------------------
+# Stripe-Subscriptions
 
 This library is designed to make it as easy as possible for python web developers to manage Stripe Subscriptions.
 
@@ -7,8 +6,7 @@ Almost all functions accept a user argument which would typically be an instant 
  
 The sister library `django_stripe` implements this logic in a django app. This library is the non-django specific code from that library put here so it can be used as the base for implementations in other frameworks.
 
-Getting Started:
-----------------
+## Getting Started:
 
 To install:
 
@@ -16,9 +14,9 @@ To install:
 pip install stripe_subscriptions
 ```
 
-To get started you must have a ```User``` object which implements the ```stripe_customer_id``` argument for storing the customer ID in Stripe.
+To get started you must have a ```User``` object which implements the ```email``` and ```stripe_customer_id``` properties.
 
-For example in Django:
+For example in Django (```email``` property already exists):
 
 ```python
 from django.db.contrib.auth import User
@@ -45,6 +43,61 @@ class StripeUser(User):
         return self.customer_id
 ```
 
+
+## Creating a checkout for a user to subscribe
+
+The easiest way to integrate with Stripe is to create a checkout. First create a product and price in the Stripe Dashboard and copy the price_id and your api keys.
+
+```python
+import stripe
+import subscriptions
+from django.contrib.auth.models import User     # Replace with appropriate ORM import
+
+stripe.api_key = "sk_test_....."
+price_id = "price_1JB9PtCz06et8VuzfLu1Z9bf"
+
+user = User.objects.get(id=1)   # Replace with your ORM logic for retrieving a user
+
+if not user.stripe_customer_id:
+    subscriptions.create_customer(user)
+    user.save()                 # Or however models can be saved in ORM
+session = subscriptions.create_subscription_checkout(user, price_id)
+session_id = session['id']
+```
+
+Return the session_id to the user (such as through an API or HTML templates) and insert the following Javascript to redirect to the Stripe checkout:
+
+```javascript
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+    var stripePublicKey = 'pk_test...';
+    var sessionId = '{{ sessionId }}';
+    
+    var stripe = Stripe(stripePublicKey);
+    stripe.redirectToCheckout({sessionId: sessionId})
+</script>
+````
+To check if a user is subscribed to the product:
+
+```python
+import stripe
+import subscriptions
+from django.contrib.auth.models import User     # Replace with appropriate ORM import
+
+stripe.api_key = "sk_test_....."
+product_id = "prod_Jo3KY017h0SZ1x"
+
+user = User.objects.get(id=1)   # Replace with your ORM logic for retrieving a user
+
+if not user.stripe_customer_id:
+    subscriptions.create_customer(user)
+    user.save()                 # Or however models can be saved in ORM
+
+is_subscribed = subscriptions.is_subscribed(user, product_id=product_id)
+```
+
+
+```
 Here are the available functions:
 
 Manage Customer IDs
@@ -69,8 +122,8 @@ def delete_customer(user: UserProtocol) -> stripe.Customer:
 
 ```
 
-Create Stripe Checkouts
------------------------
+## Create Stripe Checkouts
+
 
 These functions create Stripe Checkouts sessions.
 
@@ -106,8 +159,10 @@ def create_setup_checkout(user: UserProtocol, subscription_id: str = None, **kwa
     """
 ```
 
-Manage subscriptions
----------------------
+## Function Reference
+
+### Manage subscriptions
+
 
 For more info see: https://stripe.com/docs/api/subscriptions
 
@@ -137,7 +192,6 @@ def cancel_subscription_for_product(user: UserProtocol, product_id: str) -> bool
     Returns True if the subscription exists for that user, otherwise False.
     """
 
-
 def update_default_payment_method_all_subscriptions(user: UserProtocol, default_payment_method: str) -> stripe.Customer:
     """
     Change the default payment method for the user and for all subscriptions belonging to that user.
@@ -163,10 +217,9 @@ def create_subscription(user: UserProtocol, price_id: str,
     """
 ```
 
-Products & Prices
------------------
+### Products & Prices
 
-Methods for viewing products and prices and checking if a user is subscribed to them.
+Methods for viewing products and prices and checking if a user is subscribed to them. They can be created on the Stripe dashboard.
 
 
 For more info see:
@@ -237,8 +290,7 @@ def retrieve_product(user: Optional[UserProtocol], product_id: str,
     """
 ```
 
-Setup Intents
--------------
+### Setup Intents
 
 Setup Intents are the first step to creating a paying method which can later be used for paying for subscriptions.
 
@@ -253,14 +305,13 @@ def create_setup_intent(user: UserProtocol, payment_method_types: List[PaymentMe
     """
      Create a setup intent, the first step in adding a payment method which can later be used for paying subscriptions.
      price_kwargs is a list of filters provided to stripe.SetupIntent.create
-     For more information see:
 
      Raises an exception if the user does not have a customer id
      """
 ```
 
-Payment Methods
-----------------
+### Payment Methods
+
 For more info on Payment Methods in Stripe see:
 https://stripe.com/docs/payments/payment-methods
 
@@ -292,8 +343,7 @@ def detach_all_payment_methods(user: Optional[UserProtocol], types: List[Payment
 ```
 
 
-Generic Methods for Interacting with Stripe API
------------------------------------------------
+### Generic Methods for Interacting with Stripe API
 
 These functions mirror the retrieve, delete and modify methods of Stripe resources, but also check that the user owns the requested object. An exception will be raised otherwise. 
 

@@ -422,7 +422,6 @@ def create_setup_intent(user: UserProtocol, payment_method_types: List[PaymentMe
     """
      Create a setup intent, the first step in adding a payment method which can later be used for paying subscriptions.
      price_kwargs is a list of filters provided to stripe.SetupIntent.create
-     For more information see:
 
      Raises an exception if the user does not have a customer id
      """
