@@ -11,7 +11,7 @@ The sister library `django_stripe` implements this logic in a django app. ```str
 To install:
 
 ```shell
-pip install stripe_subscriptions
+pip install stripe-subscriptions
 ```
 
 To get started you must have a ```User``` object which implements the ```email``` and ```stripe_customer_id``` properties.
