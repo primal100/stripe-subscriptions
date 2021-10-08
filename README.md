@@ -213,7 +213,7 @@ def create_subscription(user: UserProtocol, price_id: str,
 
 ### Products & Prices
 
-Methods for viewing products and prices and checking if a user is subscribed to them. They can be created on the Stripe dashboard.
+Functions for viewing products and prices and checking if a user is subscribed to them. They can be created on the Stripe dashboard.
 
 
 For more info see:
@@ -306,8 +306,7 @@ def create_setup_intent(user: UserProtocol, payment_method_types: List[PaymentMe
 
 ### Payment Methods
 
-For more info on Payment Methods in Stripe see:
-https://stripe.com/docs/payments/payment-methods
+For more info on Payment Methods in Stripe see: https://stripe.com/docs/payments/payment-methods
 
 
 ```python
@@ -337,7 +336,7 @@ def detach_all_payment_methods(user: Optional[UserProtocol], types: List[Payment
 ```
 
 
-### Generic Methods for Interacting with Stripe API
+### Generic Functions for Interacting with Stripe API
 
 These functions mirror the retrieve, delete and modify methods of Stripe resources, but also check that the user owns the requested object. An exception will be raised otherwise. 
 
@@ -375,3 +374,83 @@ def modify(user: UserProtocol, obj_cls, obj_id: str, action: str = "modify",
 ```
 
 
+## Advanced
+
+### Creating subscriptions in a custom checkout
+
+To create a new subscription generally requires three steps:
+
+1) Create a setup intent server-side and return the ```client_secret``` to the client
+2) Use stripe.js (or equivalent for the client's platform) on the client to create the payment method with the ```client_secret```
+3) Create a subscription server side with the new payment method id and ```price_id``` to subscribe to.
+
+
+```python
+import stripe
+import subscriptions
+from django.contrib.auth.models import User     # Replace with appropriate ORM import
+
+stripe.api_key = "sk_test_....."
+price_id = "price_1JB9PtCz06et8VuzfLu1Z9bf"
+
+user = User.objects.get(id=1)   # Replace with your ORM logic for retrieving a user
+
+if not user.stripe_customer_id:
+    subscriptions.create_customer(user)
+    user.save()                 # Or however models can be saved in ORM
+
+setup_intent = subscriptions.create_setup_intent(user)
+return setup_intent['client_secret']
+
+```
+Supply the ```client_secret``` to the client either through API response or HTML template and create the payment method when the user submits their card details:
+
+
+```javascript
+<div id="card-element"></div>
+<button id="subscribe-button" type="submit">Subscribe</button>
+
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+    var stripePublicKey = 'pk_test...';
+    var client_secret = '{{ client_secret }}';
+    var hidePostalCode = true;
+    
+    var stripe = Stripe(stripePublicKey);
+    const elements = stripe.elements();
+    const card = elements.create('card', {hidePostalCode: hidePostalCode});
+    card.mount('#card-element');
+    
+    document.querySelector('#subscribe-button').addEventListener("click", () => {
+        stripe
+            .confirmCardSetup(client_secret, {
+                payment_method: {
+                    card: cardElement,
+                },
+            }).then(function (result) {
+                var paymentMethodId = paymentMethod['id'];
+                // Send request to create subscription to server with payment method
+            });
+    });
+    
+</script>
+````
+
+For more information on using Stripe Elements to collect the card details see: https://stripe.com/docs/stripe-js
+
+Now, send the payment to the server (such as through a REST API post request) and create the subscription:
+
+```python
+import stripe
+import subscriptions
+from django.contrib.auth.models import User     # Replace with appropriate ORM import
+
+stripe.api_key = "sk_test_....."
+price_id = "price_1JB9PtCz06et8VuzfLu1Z9bf"
+payment_method_id = "pm_1JiHZ7Cz06et8VuzwI1HftWk"  # Retrieved from API
+
+user = User.objects.get(id=1)   # Replace with your ORM logic for retrieving a user
+
+return subscriptions.create_subscription(user, price_id, default_payment_method=payment_method_id)
+
+```
