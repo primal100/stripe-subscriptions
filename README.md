@@ -1,10 +1,10 @@
-# Stripe-Subscriptions
+# Stripe Subscriptions
 
-This library is designed to make it as easy as possible for python web developers to manage Stripe Subscriptions.
+This library is designed to make it as easy as possible for python web developers to manage Stripe Subscriptions. It allows to create Stripe Checkouts and also contains functions to ease the creation of custom checkouts
 
 Almost all functions accept a user argument which would typically be an instant of an object created using ORM. This ensures that a user cannot access data belonging to another user. An exception will be raised if a function is called with a user who does not own the object being retrieved, updated or deleted. List functions will only return objects belonging to the user.
  
-The sister library `django_stripe` implements this logic in a django app. This library is the non-django specific code from that library put here so it can be used as the base for implementations in other frameworks.
+The sister library `django_stripe` implements this logic in a django app. ```stripe-subscriptins``` is the non-django specific code from that library put here so it can be used as the base for implementations in other frameworks and ORMs.
 
 ## Getting Started:
 
@@ -44,7 +44,7 @@ class StripeUser(User):
 ```
 
 
-## Creating a checkout for a user to subscribe
+## Example Usage
 
 The easiest way to integrate with Stripe is to create a checkout. First create a product and price in the Stripe Dashboard and copy the price_id and your api keys.
 
@@ -65,7 +65,7 @@ session = subscriptions.create_subscription_checkout(user, price_id)
 session_id = session['id']
 ```
 
-Return the session_id to the user (such as through an API or HTML templates) and insert the following Javascript to redirect to the Stripe checkout:
+Return the session_id to the user (such as through an API or HTML template) and insert the following Javascript to redirect to the Stripe checkout:
 
 ```javascript
 <script src="https://js.stripe.com/v3/"></script>
@@ -95,13 +95,9 @@ if not user.stripe_customer_id:
 
 is_subscribed = subscriptions.is_subscribed(user, product_id=product_id)
 ```
+## Function Reference
 
-
-```
-Here are the available functions:
-
-Manage Customer IDs
--------------------
+### Manage Customer IDs
 
 For more information see https://stripe.com/docs/api/customers
 ```python
@@ -122,7 +118,7 @@ def delete_customer(user: UserProtocol) -> stripe.Customer:
 
 ```
 
-## Create Stripe Checkouts
+### Create Stripe Checkouts
 
 
 These functions create Stripe Checkouts sessions.
@@ -158,8 +154,6 @@ def create_setup_checkout(user: UserProtocol, subscription_id: str = None, **kwa
     An exception will be raised if the user does already not have a customer id set.
     """
 ```
-
-## Function Reference
 
 ### Manage subscriptions
 
