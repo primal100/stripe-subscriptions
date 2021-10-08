@@ -1,9 +1,15 @@
 from functools import wraps
 from .exceptions import StripeCustomerIdRequired
+from typing import Callable
 from .types import UserProtocol
 
 
-def customer_id_required(f):
+def customer_id_required(f: Callable):
+    """
+    Decorator to check if a user already has a customer id set.
+    If not, StripeCustomerIdRequired is raised.
+    To fix this call, create_customer first.
+    """
     @wraps(f)
     def wrapper(user: UserProtocol, *args, **kwargs):
         if user and user.stripe_customer_id:
