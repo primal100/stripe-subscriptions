@@ -454,3 +454,11 @@ user = User.objects.get(id=1)   # Replace with your ORM logic for retrieving a u
 return subscriptions.create_subscription(user, price_id, default_payment_method=payment_method_id)
 
 ```
+
+## Running tests
+The tests interact with the Stripe Test API so it is needed to provide a test key to run the tests
+
+```shell
+python -m pip install --upgrade -r requirements.txt -r requirements_tests.txt
+python -m pytest tests --apikey STRIPE_TEST_SECRET_KEY
+```
