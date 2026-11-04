@@ -121,7 +121,7 @@ def delete_customer(user: UserProtocol) -> stripe.Customer:
 ### Create Stripe Checkouts
 
 
-These functions create Stripe Checkouts sessions.
+These functions create Stripe Checkouts sessions. Checkout payment methods are managed in the Stripe Dashboard; do not pass `payment_method_types`. For setup-mode Checkout sessions, pass a currency, for example `create_setup_checkout(user, currency="usd", success_url="https://example.com/success")`.
 
 Use stripe.js to redirect to the given sessionId.
 
@@ -286,7 +286,7 @@ def retrieve_product(user: Optional[UserProtocol], product_id: str,
 
 ### Setup Intents
 
-Setup Intents are the first step to creating a paying method which can later be used for paying for subscriptions.
+Setup Intents are the first step to creating a paying method which can later be used for paying for subscriptions. The helper maps `payment_method_types` to Stripe's `allowed_payment_method_types` parameter. Omit it to use Dashboard-managed payment methods.
 
 For more information see:
 https://stripe.com/docs/api/setup_intents
@@ -455,10 +455,37 @@ return subscriptions.create_subscription(user, price_id, default_payment_method=
 
 ```
 
-## Running tests
-The tests interact with the Stripe Test API so it is needed to provide a test key to run the tests
+## Development and testing
+
+Requires Python 3.11 or newer. Runtime dependencies and package metadata are declared in `pyproject.toml`.
+
+Install the test tools with the Stripe SDK version used by CI:
 
 ```shell
-python -m pip install --upgrade -r requirements.txt -r requirements_tests.txt
-python -m pytest tests --apikey STRIPE_TEST_SECRET_KEY
+python -m pip install -c constraints-ci.txt ".[test]"
+```
+
+Run offline tests and type checks without a Stripe key:
+
+```shell
+python -m pytest tests/test_stripe_resources.py -q
+python -m mypy
+```
+
+Integration tests create and delete resources in Stripe test mode. Set `STRIPE_TEST_SECRET_KEY` in your environment, then run:
+
+```shell
+python -m pytest tests/test_subscriptions.py -vv
+```
+
+CI runs offline checks on Python 3.11 through 3.15 for pull requests and pushes. Stripe integration tests run on pushes to `master` and manual workflow runs when the test-key secret is configured. Each test customer has a unique email so overlapping runs do not share customers.
+
+The supported Stripe dependency range is `>=16.1,<17`; CI uses the exact version in `constraints-ci.txt`. Validate SDK upgrades with the integration suite before updating that constraint or expanding the range.
+
+Build and validate the wheel and source distribution:
+
+```shell
+python -m pip install build twine
+python -m build
+python -m twine check dist/*
 ```

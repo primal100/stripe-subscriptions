@@ -1,5 +1,44 @@
 [build-system]
-requires = [
-    "setuptools",
-]
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "stripe-subscriptions"
+dynamic = ["version"]
+description = "Easier management of subscriptions with Stripe"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE.txt"]
+authors = [{name = "Paul Martin"}]
+dependencies = ["stripe>=16.1,<17"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/primal100/stripe-subscriptions"
+
+[project.optional-dependencies]
+test = ["pytest>=7", "mypy>=1"]
+
+[tool.setuptools]
+packages = ["subscriptions"]
+
+[tool.setuptools.dynamic]
+version = {attr = "subscriptions.__version__.version"}
+
+[tool.setuptools.package-data]
+subscriptions = ["py.typed"]
+
+[tool.mypy]
+files = ["subscriptions/__init__.py", "subscriptions/types.py", "subscriptions/decorators.py"]
+follow_imports = "silent"
+ignore_missing_imports = true
