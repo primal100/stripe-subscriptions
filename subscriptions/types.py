@@ -1,14 +1,4 @@
-import sys
-from typing import Any, Optional, Dict, Sequence, List
-
-
-py38 = sys.version_info >= (3, 8)
-
-
-if py38:
-    from typing import Protocol, Literal, TypedDict
-else:
-    from typing_extensions import Protocol, Literal, TypedDict
+from typing import Any, Optional, Dict, Sequence, List, TypeVar, Protocol, Literal, TypedDict
 
 
 PaymentMethodType = Literal[
@@ -41,10 +31,10 @@ class UserProtocol(Protocol):
 
 class ProductSubscription(TypedDict):
     sub_id: str
-    product_id: str
-    price_id: str
-    cancel_at: int
-    current_period_end: int
+    product_id: Optional[str]
+    price_id: Optional[str]
+    cancel_at: Optional[int]
+    current_period_end: Optional[int]
 
 
 class ProductIsSubscribed(TypedDict):
@@ -67,12 +57,12 @@ class ProductPriceSubscription(ProductSubscription):
 
 class PriceNoProduct(TypedDict):
     id: str
-    recurring: Dict[str, Any]
+    recurring: Optional[Dict[str, Any]]
     type: str
     currency: str
-    unit_amount: int
-    unit_amount_decimal: float
-    nickmame: str
+    unit_amount: Optional[int]
+    unit_amount_decimal: Optional[str]
+    nickname: Optional[str]
     metadata: Dict[str, str]
 
 
@@ -93,12 +83,27 @@ class Product(TypedDict):
     images: Sequence[str]
     type: str
     name: str
-    shippable: bool
-    unit_label: str
-    url: str
+    shippable: Optional[bool]
+    unit_label: Optional[str]
+    url: Optional[str]
     metadata: Dict[str, str]
 
 
 class ProductDetail(Product):
     subscription_info: SubscriptionInfo
     prices: List[PriceNoProductSubscriptionInfo]
+
+
+ResourceT_co = TypeVar('ResourceT_co', covariant=True)
+
+
+class RetrievableResource(Protocol[ResourceT_co]):
+    def retrieve(self, *args: Any, **kwargs: Any) -> ResourceT_co: ...
+
+
+class ModifiableResource(RetrievableResource[ResourceT_co], Protocol[ResourceT_co]):
+    def modify(self, *args: Any, **kwargs: Any) -> ResourceT_co: ...
+
+
+class DeletableResource(RetrievableResource[ResourceT_co], Protocol[ResourceT_co]):
+    def delete(self, *args: Any, **kwargs: Any) -> ResourceT_co: ...

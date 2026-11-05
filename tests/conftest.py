@@ -1,9 +1,10 @@
 import os
+from uuid import uuid4
 
 import sys
 import pytest
 import stripe
-from stripe.error import InvalidRequestError
+from stripe import InvalidRequestError
 from datetime import datetime, timedelta
 
 import subscriptions
@@ -52,7 +53,7 @@ def payment_method_types() -> List[str]:
 
 @pytest.fixture
 def user_email() -> str:
-    return f'stripe-subscriptions-{ci_string}@example.com'
+    return f'stripe-subscriptions-{ci_string}-{uuid4().hex}@example.com'
 
 
 @pytest.fixture
@@ -85,9 +86,6 @@ def wrong_customer_id() -> UserProtocol:
 
 @pytest.fixture
 def user_with_customer_id(user, user_email) -> UserProtocol:
-    customers = stripe.Customer.list(email=user_email)
-    for customer in customers:
-        stripe.Customer.delete(customer)
     subscriptions.create_customer(user, description="stripe-subscriptions test runner user")
     return user
 
@@ -221,7 +219,7 @@ def subscription_id(subscription):
 
 @pytest.fixture
 def subscription_current_period_end(subscription):
-    return subscription['current_period_end']
+    return subscription['items'].data[0]['current_period_end']
 
 
 @pytest.fixture
@@ -230,7 +228,7 @@ def expected_subscription_prices(stripe_subscription_product_id, stripe_price_id
     return [
         {'id': stripe_price_id,
          'recurring': {
-              "aggregate_usage": None,
+              "meter": None,
               "interval": "month",
               "interval_count": 1,
               "trial_period_days": None,
@@ -254,7 +252,7 @@ def expected_subscription_prices_unsubscribed(stripe_subscription_product_id, st
     return [
         {'id': stripe_price_id,
          'recurring': {
-              "aggregate_usage": None,
+              "meter": None,
               "interval": "month",
               "interval_count": 1,
               "trial_period_days": None,
@@ -287,7 +285,7 @@ def expected_subscription_products_and_prices(stripe_subscription_product_id, st
                   'id': stripe_unsubscribed_price_id,
                   'metadata': {},
                   'nickname': None,
-                  'recurring': {'aggregate_usage': None,
+                  'recurring': {'meter': None,
                                 'interval': 'year',
                                 'interval_count': 1,
                                 'trial_period_days': None,
@@ -311,7 +309,7 @@ def expected_subscription_products_and_prices(stripe_subscription_product_id, st
          'metadata': {},
          'prices': [{'id': stripe_price_id,
                      'recurring': {
-                      "aggregate_usage": None,
+                      "meter": None,
                       "interval": "month",
                       "interval_count": 1,
                       "trial_period_days": None,
@@ -344,7 +342,7 @@ def expected_subscription_products_and_prices_unsubscribed(stripe_subscription_p
                   'id': stripe_unsubscribed_price_id,
                   'metadata': {},
                   'nickname': None,
-                  'recurring': {'aggregate_usage': None,
+                  'recurring': {'meter': None,
                                 'interval': 'year',
                                 'interval_count': 1,
                                 'trial_period_days': None,
@@ -368,7 +366,7 @@ def expected_subscription_products_and_prices_unsubscribed(stripe_subscription_p
          'metadata': {},
          'prices': [{'id': stripe_price_id,
                      'recurring': {
-                      "aggregate_usage": None,
+                      "meter": None,
                       "interval": "month",
                       "interval_count": 1,
                       "trial_period_days": None,

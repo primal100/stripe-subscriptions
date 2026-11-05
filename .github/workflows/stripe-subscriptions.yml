@@ -1,36 +1,86 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
-
 name: Stripe-Subscriptions package
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 3
+  offline:
+    name: Offline tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-        python-version: [3.9]
-
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v1
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .
-        pip install -r requirements_tests.txt
-    - name: Test with pytest
-      run: |
-        pytest tests -vv --apikey ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            constraints-ci.txt
+      - name: Install dependencies
+        run: python -m pip install -c constraints-ci.txt ".[test]"
+      - name: Offline regression tests
+        run: python -m pytest tests/test_stripe_resources.py -q
+      - name: Type check
+        run: python -m mypy
+
+  package:
+    name: Build and validate distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install build tools
+        run: python -m pip install build twine
+      - name: Build sdist and wheel
+        run: python -m build
+      - name: Validate distribution metadata
+        run: python -m twine check dist/*
+      - name: Install wheel in a clean environment
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-test"
+          "$RUNNER_TEMP/wheel-test/bin/python" -m pip install -c constraints-ci.txt dist/*.whl pytest
+          "$RUNNER_TEMP/wheel-test/bin/python" -m pip check
+          "$RUNNER_TEMP/wheel-test/bin/python" -I -c "import subscriptions; from importlib.resources import files; assert files('subscriptions').joinpath('py.typed').is_file()"
+      - name: Test installed wheel outside the checkout
+        working-directory: ${{ runner.temp }}
+        run: '"$RUNNER_TEMP/wheel-test/bin/python" -m pytest "$GITHUB_WORKSPACE/tests/test_stripe_resources.py" --import-mode=importlib -q'
+
+  integration:
+    name: Stripe test API
+    needs: [offline, package]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+    steps:
+      - name: Report missing test key
+        if: env.STRIPE_TEST_SECRET_KEY == ''
+        run: echo "::notice::Stripe integration tests skipped because STRIPE_TEST_SECRET_KEY is not configured."
+      - uses: actions/checkout@v7
+        if: env.STRIPE_TEST_SECRET_KEY != ''
+      - uses: actions/setup-python@v7
+        if: env.STRIPE_TEST_SECRET_KEY != ''
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        if: env.STRIPE_TEST_SECRET_KEY != ''
+        run: python -m pip install -c constraints-ci.txt ".[test]"
+      - name: Integration tests
+        if: env.STRIPE_TEST_SECRET_KEY != ''
+        run: python -m pytest tests/test_subscriptions.py -vv

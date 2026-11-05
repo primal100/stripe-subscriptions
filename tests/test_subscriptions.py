@@ -11,11 +11,10 @@ def test_create_customer_user(user):
 
 
 def test_create_subscription_checkout_session(user_with_customer_id, stripe_price_id, checkout_success_url,
-                                              checkout_cancel_url, payment_method_types):
+                                              checkout_cancel_url):
     checkout = subscriptions.create_subscription_checkout(user_with_customer_id, stripe_price_id,
                                                           success_url=checkout_success_url,
-                                                          cancel_url=checkout_cancel_url,
-                                                          payment_method_types=payment_method_types)
+                                                          cancel_url=checkout_cancel_url)
     assert checkout['id'] is not None
     assert checkout['setup_intent'] is None
     assert checkout['success_url'] == checkout_success_url
@@ -28,27 +27,27 @@ def test_create_checkout_session_no_customer_id_fails(user, stripe_price_id):
 
 
 def test_create_setup_checkout_session(user_with_customer_id, checkout_success_url,
-                                       checkout_cancel_url, payment_method_types):
+                                       checkout_cancel_url, stripe_price_currency):
     checkout = subscriptions.create_setup_checkout(user_with_customer_id,
                                                    success_url=checkout_success_url,
                                                    cancel_url=checkout_cancel_url,
-                                                   payment_method_types=payment_method_types)
+                                                   currency=stripe_price_currency)
     assert checkout['id'] is not None
     assert checkout['setup_intent'] is not None
     assert checkout['success_url'] == checkout_success_url
     assert checkout['cancel_url'] == checkout_cancel_url
     setup_intent = stripe.SetupIntent.retrieve(checkout['setup_intent'])
-    assert 'subscription_id' not in setup_intent['metadata'] == {}
+    assert setup_intent['metadata'].to_dict() == {}
 
 
 def test_create_setup_checkout_session_with_subscription(user_with_customer_id, checkout_success_url,
-                                                         checkout_cancel_url, payment_method_types,
+                                                         checkout_cancel_url, stripe_price_currency,
                                                          subscription):
     checkout = subscriptions.create_setup_checkout(user_with_customer_id,
                                                    subscription_id=subscription['id'],
                                                    success_url=checkout_success_url,
                                                    cancel_url=checkout_cancel_url,
-                                                   payment_method_types=payment_method_types)
+                                                   currency=stripe_price_currency)
     assert checkout['id'] is not None
     assert checkout['setup_intent'] is not None
     assert checkout['success_url'] == checkout_success_url

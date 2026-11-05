@@ -1,10 +1,13 @@
 from functools import wraps
 from .exceptions import StripeCustomerIdRequired
-from typing import Callable
+from typing import Any, Callable, TypeVar, cast
 from .types import UserProtocol
 
 
-def customer_id_required(f: Callable):
+CallableT = TypeVar('CallableT', bound=Callable[..., Any])
+
+
+def customer_id_required(f: CallableT) -> CallableT:
     """
     Decorator to check if a user already has a customer id set.
     If not, StripeCustomerIdRequired is raised.
@@ -16,5 +19,5 @@ def customer_id_required(f: Callable):
             return f(user, *args, **kwargs)
         raise StripeCustomerIdRequired(
             "It is required to first create this customer in stripe using the create_customer method, and save changes to the stripe_customer_id field")
-    return wrapper
+    return cast(CallableT, wrapper)
 
