@@ -1,0 +1,6 @@
+
+# Python build and type-check outputs
+build/
+dist/
+*.egg-info/
+.mypy_cache/
