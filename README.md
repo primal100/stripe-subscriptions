@@ -489,3 +489,33 @@ python -m pip install build twine
 python -m build
 python -m twine check dist/*
 ```
+
+## Publishing a release
+
+Start from the merged release commit and set a new, unpublished version in `subscriptions/__version__.py`. Commit that version change and ensure CI passes before publishing. The scripts build the current checkout; they do not switch branches, update the version, commit, or tag it.
+
+Install the publishing tools into your active Python 3.11+ environment:
+
+```shell
+python -m pip install --upgrade build twine
+```
+
+PowerShell:
+
+```powershell
+.\publish.ps1 -BuildOnly
+.\publish.ps1 -Repository testpypi
+.\publish.ps1
+```
+
+Bash:
+
+```bash
+./publish.sh --build-only
+./publish.sh --repository testpypi
+./publish.sh
+```
+
+Each invocation builds and strictly validates one wheel and one source distribution in a fresh `dist/release-*` directory, avoiding old artifacts. Build-only mode does not upload anything. Without that option, the default destination is **PyPI**; `testpypi` selects TestPyPI instead.
+
+Use `-Python PATH` or `--python PATH` to select an interpreter; otherwise PowerShell uses `python` and Bash uses `python3`. Supply the destination's API token at Twine's password prompt, or use its `TWINE_PASSWORD` environment variable in automation. PyPI and TestPyPI use separate accounts/tokens. Do not commit credentials. Published distribution filenames cannot be reused; choose a new version for subsequent releases.
