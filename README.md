@@ -61,22 +61,29 @@ user = User.objects.get(id=1)   # Replace with your ORM logic for retrieving a u
 if not user.stripe_customer_id:
     subscriptions.create_customer(user)
     user.save()                 # Or however models can be saved in ORM
-session = subscriptions.create_subscription_checkout(user, price_id)
-session_id = session['id']
+session = subscriptions.create_subscription_checkout(
+    user,
+    price_id,
+    success_url="https://example.com/success",
+    cancel_url="https://example.com/cancel",
+)
+response_data = {
+    "session_id": session.id,
+    "checkout_url": session.url,
+}
+# Return response_data as JSON using your web framework.
 ```
 
-Return the session_id to the user (such as through an API or HTML template) and insert the following Javascript to redirect to the Stripe checkout:
+For Stripe-hosted Checkout, return both `session_id` and `checkout_url` from your backend. After parsing that JSON response as `checkout`, redirect the browser directly to the full URL:
 
 ```javascript
-<script src="https://js.stripe.com/v3/"></script>
-<script>
-    var stripePublicKey = 'pk_test...';
-    var sessionId = '{{ sessionId }}';
-    
-    var stripe = Stripe(stripePublicKey);
-    stripe.redirectToCheckout({sessionId: sessionId})
-</script>
-````
+window.location.assign(checkout.checkout_url);
+```
+
+Stripe.js and a publishable key are not needed for this redirect. Stripe removed `stripe.redirectToCheckout`; see the [migration guidance](https://docs.stripe.com/changelog/clover/2025-09-30/remove-redirect-to-checkout). The session ID can remain in the response for existing consumers, but the redirect uses `checkout_url`.
+
+All three Checkout helpers already return the full `stripe.checkout.Session` with its `id` and `url`; no new return type or extra Stripe request is needed. This redirect flow applies to hosted Checkout. Embedded or custom Checkout uses its own frontend integration and can return a null `url`.
+
 To check if a user is subscribed to the product:
 
 ```python
@@ -123,7 +130,7 @@ def delete_customer(user: UserProtocol) -> stripe.Customer:
 
 These functions create Stripe Checkouts sessions. Checkout payment methods are managed in the Stripe Dashboard; do not pass `payment_method_types`. For setup-mode Checkout sessions, pass a currency, for example `create_setup_checkout(user, currency="usd", success_url="https://example.com/success")`.
 
-Use stripe.js to redirect to the given sessionId.
+These helpers return the complete `stripe.checkout.Session`. For hosted Checkout, include `session.id` and `session.url` in your backend response and redirect the browser to `session.url`, as shown above. This also applies to setup-mode Checkout.
 
 See here for more info:
 https://stripe.com/docs/payments/checkout

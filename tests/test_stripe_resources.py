@@ -4,6 +4,29 @@ import stripe
 import subscriptions
 
 
+@pytest.mark.parametrize('helper, args, options', [
+    (subscriptions.create_checkout, ('payment',), {}),
+    (subscriptions.create_subscription_checkout, ('price_test',), {}),
+    (subscriptions.create_setup_checkout, (), {'currency': 'usd'}),
+])
+def test_checkout_helpers_preserve_session_id_and_url(monkeypatch, helper, args, options):
+    from unittest.mock import Mock
+
+    session = stripe.checkout.Session.construct_from({
+        'id': 'cs_test',
+        'url': 'https://checkout.stripe.com/c/pay/cs_test',
+    }, None)
+    create = Mock(return_value=session)
+    monkeypatch.setattr(stripe.checkout.Session, 'create', create)
+    checkout = helper(subscriptions.User(1, 'test@example.com', 'cus_test'), *args, **options)
+
+    assert checkout is session
+    assert {'session_id': checkout.id, 'checkout_url': checkout.url} == {
+        'session_id': 'cs_test', 'checkout_url': 'https://checkout.stripe.com/c/pay/cs_test',
+    }
+    create.assert_called_once()
+
+
 @pytest.mark.parametrize('options, expected', [
     ({}, {}),
     ({'payment_method_types': ['card']}, {'allowed_payment_method_types': ['card']}),
