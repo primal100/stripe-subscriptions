@@ -66,6 +66,7 @@ def create_checkout(user: UserProtocol, mode: Literal["payment", "setup", "subsc
                     **kwargs) -> stripe.checkout.Session:
     """
     Creates a new Stripe checkout session for this user.
+    Returns the full Session; use its id and url for a hosted Checkout response.
     Recommended to call create_subscription_checkout or create_setup_checkout instead.
     An exception will be raised if the user does already not have a customer id set.
     """
@@ -80,6 +81,7 @@ def create_checkout(user: UserProtocol, mode: Literal["payment", "setup", "subsc
 def create_subscription_checkout(user: UserProtocol, price_id: str, **kwargs) -> stripe.checkout.Session:
     """
     Creates a new Stripe subscription checkout session for this user for the given price.
+    Returns the full Session, including its hosted Checkout url and id.
     An exception will be raised if the user does already not have a customer id set.
     """
     return create_checkout(user, "subscription", [
@@ -93,6 +95,7 @@ def create_subscription_checkout(user: UserProtocol, price_id: str, **kwargs) ->
 def create_setup_checkout(user: UserProtocol, subscription_id: Optional[str] = None, **kwargs) -> stripe.checkout.Session:
     """
     Creates a new Stripe setup checkout session for this user, allowing them to add a new payment method for future use.
+    Returns the full Session, including its hosted Checkout url and id.
     An exception will be raised if the user does already not have a customer id set.
     """
     if subscription_id:

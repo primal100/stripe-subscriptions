@@ -16,6 +16,7 @@ def test_create_subscription_checkout_session(user_with_customer_id, stripe_pric
                                                           success_url=checkout_success_url,
                                                           cancel_url=checkout_cancel_url)
     assert checkout['id'] is not None
+    assert checkout['url'] and checkout['url'].startswith('https://')
     assert checkout['setup_intent'] is None
     assert checkout['success_url'] == checkout_success_url
     assert checkout['cancel_url'] == checkout_cancel_url
@@ -33,6 +34,7 @@ def test_create_setup_checkout_session(user_with_customer_id, checkout_success_u
                                                    cancel_url=checkout_cancel_url,
                                                    currency=stripe_price_currency)
     assert checkout['id'] is not None
+    assert checkout['url'] and checkout['url'].startswith('https://')
     assert checkout['setup_intent'] is not None
     assert checkout['success_url'] == checkout_success_url
     assert checkout['cancel_url'] == checkout_cancel_url
@@ -49,6 +51,7 @@ def test_create_setup_checkout_session_with_subscription(user_with_customer_id, 
                                                    cancel_url=checkout_cancel_url,
                                                    currency=stripe_price_currency)
     assert checkout['id'] is not None
+    assert checkout['url'] and checkout['url'].startswith('https://')
     assert checkout['setup_intent'] is not None
     assert checkout['success_url'] == checkout_success_url
     assert checkout['cancel_url'] == checkout_cancel_url
