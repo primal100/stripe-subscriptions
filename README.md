@@ -487,7 +487,7 @@ python -m pytest tests/test_subscriptions.py -vv
 
 CI runs offline checks on Python 3.11 through 3.15 for pull requests and pushes. Stripe integration tests run on pushes to `master` and manual workflow runs when the test-key secret is configured. Each test customer has a unique email so overlapping runs do not share customers.
 
-The supported Stripe dependency range is `>=16.1,<17`; CI uses the exact version in `constraints-ci.txt`. Validate SDK upgrades with the integration suite before updating that constraint or expanding the range.
+The Stripe dependency requirement is `>=16`, with no upper version limit. CI uses the exact version in `constraints-ci.txt`; validate SDK upgrades with the integration suite before updating that constraint.
 
 Build and validate the wheel and source distribution:
 
