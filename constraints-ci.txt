@@ -1,2 +1,2 @@
 # Upgrade deliberately after validating against the Stripe test API.
-stripe==16.1.0
+stripe==17.0.0
